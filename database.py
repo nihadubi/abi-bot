@@ -51,6 +51,17 @@ class Database:
                     """
                 )
 
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS guild_settings (
+                        guild_id INTEGER,
+                        key TEXT,
+                        value TEXT,
+                        PRIMARY KEY (guild_id, key)
+                    )
+                    """
+                )
+
                 # Mövcud bazada çatışmayan sütunları əlavə edirik
                 cursor.execute("PRAGMA table_info(users)")
                 existing_columns = {row[1] for row in cursor.fetchall()}
@@ -63,6 +74,40 @@ class Database:
                 conn.commit()
         except Exception as error:
             print(f"[DB Xətası] Cədvəllər yaradılmadı: {error}")
+
+    def set_guild_setting(self, guild_id: int, key: str, value: str):
+        # Server tənzimləməsini bazaya yazırıq
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO guild_settings (guild_id, key, value)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
+                    """,
+                    (guild_id, key, str(value)),
+                )
+                conn.commit()
+                return True
+        except Exception as error:
+            print(f"[DB Xətası] Tənzimləmə saxlanılmadı: {error}")
+            return False
+
+    def get_guild_setting(self, guild_id: int, key: str, default=None):
+        # Server tənzimləməsini bazadan oxuyuruq
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
+                    (guild_id, key),
+                )
+                row = cursor.fetchone()
+                return row[0] if row else default
+        except Exception as error:
+            print(f"[DB Xətası] Tənzimləmə oxunmadı: {error}")
+            return default
 
     def add_voice_time(self, user_id, username, display_name, seconds):
         # İstifadəçinin səs vaxtını ümumi və günlük statistikalara əlavə edirik
@@ -464,3 +509,40 @@ class Database:
         except Exception as error:
             print(f"[DB Xətası] Xəbərdarlıqlar alınmadı: {error}")
             return []
+
+    def get_warning_count(self, user_id):
+        # İstifadəçinin ümumi xəbərdarlıq sayını qaytarırıq
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM warnings WHERE user_id = ?", (user_id,))
+                row = cursor.fetchone()
+                return row[0] if row else 0
+        except Exception as error:
+            print(f"[DB Xətası] Xəbərdarlıq sayı alınmadı: {error}")
+            return 0
+
+    def delete_warning(self, warning_id):
+        # ID üzrə xüsusi xəbərdarlığı silirik
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM warnings WHERE id = ?", (warning_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as error:
+            print(f"[DB Xətası] Xəbərdarlıq silinmədi: {error}")
+            return False
+
+    def clear_warnings(self, user_id):
+        # İstifadəçinin bütün xəbərdarlıqlarını təmizləyirik
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM warnings WHERE user_id = ?", (user_id,))
+                conn.commit()
+                return cursor.rowcount
+        except Exception as error:
+            print(f"[DB Xətası] Xəbərdarlıqlar təmizlənmədi: {error}")
+            return 0
+

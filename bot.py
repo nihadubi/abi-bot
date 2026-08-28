@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 
 import discord
 from aiohttp import web
+from discord import app_commands
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -62,15 +63,32 @@ last_xp_award = {}
 
 
 async def send_mod_log(guild: discord.Guild, embed: discord.Embed):
-    # Log kanalına embed göndəririk (MOD_LOG_CHANNEL_ID təyin olunubsa)
-    if not guild or not MOD_LOG_CHANNEL_ID:
+    # Log kanalına embed göndəririk (Server tənzimləməsi və ya MOD_LOG_CHANNEL_ID əsasında)
+    if not guild:
         return
-    channel = guild.get_channel(MOD_LOG_CHANNEL_ID)
+
+    # İlk öncə bazadakı dinamik quraşdırmanı yoxlayırıq
+    target_channel_id = db.get_guild_setting(guild.id, "mod_log_channel")
+    if target_channel_id:
+        try:
+            target_channel_id = int(target_channel_id)
+        except ValueError:
+            target_channel_id = None
+
+    # Əgər bazada yoxdursa, .env-dəki ümumi ID-yə baxırıq
+    if not target_channel_id:
+        target_channel_id = MOD_LOG_CHANNEL_ID
+
+    if not target_channel_id:
+        return
+
+    channel = guild.get_channel(target_channel_id)
     if channel:
         try:
             await channel.send(embed=embed)
         except Exception as e:
             logger.warning(f"Mod log göndərilə bilmədi: {e}")
+
 
 
 def is_exempt_member(member: discord.Member) -> bool:
@@ -199,9 +217,8 @@ async def on_ready():
                 voice_sessions[member.id] = datetime.utcnow()
 
     await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name="👁️ Big bro is watching you all"
+        activity=discord.CustomActivity(
+            name="/komandalar"
         ),
         status=discord.Status.online
     )
@@ -211,6 +228,12 @@ async def on_ready():
 
     if not xp_task.is_running():
         xp_task.start()
+
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"{len(synced)} Slash komandası Discord ilə sinxronlaşdırıldı.")
+    except Exception as e:
+        logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
 
     print(f"{bot.user} olaraq daxil olundu.")
 
@@ -335,7 +358,7 @@ async def on_message(message: discord.Message):
                     except Exception:
                         pass
 
-                    timeout_until = now + timedelta(minutes=SPAM_TIMEOUT_MINUTES)
+                    timeout_until = discord.utils.utcnow() + timedelta(minutes=SPAM_TIMEOUT_MINUTES)
                     try:
                         await message.author.timeout(timeout_until, reason="Anti-spam: çox sürətli mesaj")
                         await message.channel.send(
@@ -354,6 +377,52 @@ async def on_message(message: discord.Message):
                     return
         except Exception as error:
             logger.warning(f"on_message filtr xətası: {error}")
+
+    # İnteraktiv və mehriban mesaj cavabları
+    clean_text = message.content.strip().lower()
+    # Həm "ə", həm "e", hərf dəyişiklikləri və durğu işarələrini nəzərə alırıq
+    norm_text = clean_text.replace("ə", "e").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ğ", "g").replace("ç", "c").replace("ş", "s")
+    norm_text = re.sub(r"[?!.,/\\@#_~-]+", "", norm_text).strip()
+
+    # Xüsusi interaktiv dialoqlar
+    if norm_text in ["abi necesen", "abi necəsən", "abi netersen", "abi nətərsən", "abi keyfler nece", "abi keyflər necə"]:
+        replies = [
+            f"Sağ ol, {message.author.mention}! Bomba kimiyəm, sən necəsən? 😎",
+            f"Şükür yaxşılıqdır, {message.author.mention}! Sən nə var nə yox? 🎙️",
+            f"Serverin keşiyindəyəm, hər şey əladır! Sən necəsən? 🔥"
+        ]
+        import random
+        await message.reply(random.choice(replies))
+        return
+
+    if norm_text in ["abi salam", "salam abi", "selam abi", "abi selam"]:
+        await message.reply(f"Salam aleykum, {message.author.mention}! Xoş gördük 👋")
+        return
+
+    if norm_text in ["abi ne var ne yox", "abi nə var nə yox", "abi nava nox"]:
+        await message.reply("Hər şey qaydasındadır, səs kanallarına nəzarət edirəm! Səndə nə xəbər? 🎧")
+        return
+
+    if norm_text in ["abi sag ol", "abi sağ ol", "abi cox sag ol", "abi çox sağ ol", "twk abi", "təsəkkür abi", "tesekkur abi"]:
+        await message.reply(f"Dəyməz, {message.author.mention}, hər zaman xidmətindəyəm! 🫡")
+        return
+
+    if norm_text in ["abi sevirsen meni", "abi məni sevirsən", "abi meni sevirsen"]:
+        await message.reply("Əlbəttə, sən bizim serverin ən dəyərli üzvüsən! ❤️")
+        return
+
+    if norm_text in [
+        "abi caldirir misin", "abi çaldırır mısın", "abi caldirirmisin", "abi çaldırırmısın",
+        "abi caldirirsiniz", "abi caldirirsan", "abi çaldırırsan", "caldirir misin abi"
+    ]:
+        caldir_replies = [
+            f"Çaldırmaq sakso deməkdir, {message.author.mention}... Nə saksosudur bu belə? 🤨🎷",
+            f"Ayıb olsun sənə {message.author.mention}, mən serverin abisiyəm, sən nə təklif edirsən? 😳",
+            f"Açığı çaldırmaq sakso deməkdir axı... Özünə gəl, {message.author.mention}! 😂🎷"
+        ]
+        import random
+        await message.reply(random.choice(caldir_replies))
+        return
 
     # Mövcud prefix komandalarının işləməsi üçün bunu mütləq çağırırıq
     await bot.process_commands(message)
@@ -526,16 +595,34 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
     db.upsert_user_identity(member.id, member.name, member.display_name)
     db.upsert_user_identity(ctx.author.id, ctx.author.name, ctx.author.display_name)
     db.add_warning(member.id, ctx.author.id, reason)
-    logger.info(f"Warn verildi | mod={ctx.author.id} user={member.id} reason={reason}")
+    total_warns = db.get_warning_count(member.id)
+    logger.info(f"Warn verildi | mod={ctx.author.id} user={member.id} count={total_warns} reason={reason}")
+
+    # Avtomatik cəza sistemi (Auto-Escalation)
+    auto_punishment_note = ""
+    if total_warns == 3:
+        timeout_until = discord.utils.utcnow() + timedelta(hours=1)
+        try:
+            await member.timeout(timeout_until, reason="3 xəbərdarlığa çatdı (Avtomatik 1 saat Mute)")
+            auto_punishment_note = "\n\n⚠️ **Avtomatik Cəza:** İstifadəçi 3 xəbərdarlığa çatdığı üçün **1 saatlıq Mute (Timeout)** edildi!"
+        except Exception:
+            pass
+    elif total_warns >= 5:
+        timeout_until = discord.utils.utcnow() + timedelta(days=1)
+        try:
+            await member.timeout(timeout_until, reason="5 və ya daha çox xəbərdarlıq (Avtomatik 24 saat Mute)")
+            auto_punishment_note = f"\n\n🚨 **Avtomatik Cəza:** İstifadəçi {total_warns} xəbərdarlığa çatdığı üçün **24 saatlıq Mute (Timeout)** edildi!"
+        except Exception:
+            pass
 
     embed = discord.Embed(
-        title="⚠️ Xəbərdarlıq Verildi",
-        description=f"**Cəzalandırılan:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
-        color=0xFEE75C,
+        title="⚠️ Xəbərdarlıq (Warn) Verildi",
+        description=f"**Cəzalandırılan:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Ümumi Xəbərdarlıq Sayı:** `{total_warns}`{auto_punishment_note}\n**Moderator:** {ctx.author.mention}",
+        color=0xFEE75C if total_warns < 3 else 0xED4245,
         timestamp=datetime.utcnow()
     )
     embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-    embed.set_footer(text="Xəbərdarlıq qeydə alındı • abi-bot")
+    embed.set_footer(text=f"Ümumi: {total_warns} xəbərdarlıq • abi-bot")
     await ctx.send(embed=embed)
     await send_mod_log(ctx.guild, embed)
 
@@ -545,6 +632,7 @@ async def warnings(ctx, member: discord.Member = None):
     # İstifadəçinin son xəbərdarlıqlarını göstəririk
     target = member or ctx.author
     rows = db.get_warnings(target.id, limit=10)
+    total_count = db.get_warning_count(target.id)
 
     if not rows:
         embed = discord.Embed(
@@ -566,13 +654,44 @@ async def warnings(ctx, member: discord.Member = None):
 
     embed = discord.Embed(
         title=f"⚠️ {target.display_name} — Xəbərdarlıq Tarixçəsi",
-        description="\n\n".join(lines),
+        description=f"**Ümumi Xəbərdarlıq:** `{total_count}` ədəd\n\n" + "\n\n".join(lines),
         color=0xFAA61A,
         timestamp=datetime.utcnow()
     )
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.set_footer(text=f"Cəmi {len(rows)} xəbərdarlıq göstərilir • abi-bot")
+    embed.set_footer(text="Silmək üçün: abi delwarn [ID] və ya abi clearwarn @user • abi-bot")
     await ctx.send(embed=embed)
+
+
+@bot.command(name="delwarn")
+@commands.has_permissions(manage_messages=True)
+async def delwarn(ctx, warning_id: int):
+    # Tək bir xəbərdarlığı ID ilə silirik
+    success = db.delete_warning(warning_id)
+    if success:
+        await send_success_card(
+            ctx,
+            "Xəbərdarlıq Silindi",
+            f"✅ `#{warning_id}` nömrəli xəbərdarlıq bazadan uğurla silindi."
+        )
+    else:
+        await send_error_card(ctx, "Tapılmadı", f"`#{warning_id}` nömrəli xəbərdarlıq tapılmadı.")
+
+
+@bot.command(name="clearwarn")
+@commands.has_permissions(manage_messages=True)
+async def clearwarn(ctx, member: discord.Member):
+    # İstifadəçinin bütün xəbərdarlıqlarını təmizləyirik
+    count = db.clear_warnings(member.id)
+    if count > 0:
+        await send_success_card(
+            ctx,
+            "Xəbərdarlıqlar Təmizləndi",
+            f"✅ {member.mention} istifadəçisinin bütün (`{count}` ədəd) xəbərdarlıqları silindi."
+        )
+    else:
+        await send_error_card(ctx, "Məlumat Yoxdur", f"{member.mention} üçün silinəcək aktiv xəbərdarlıq tapılmadı.")
+
 
 
 @bot.command(name="temizle")
@@ -608,7 +727,7 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
         return
 
     minutes = max(1, min(minutes, 40320))
-    until = datetime.utcnow() + timedelta(minutes=minutes)
+    until = discord.utils.utcnow() + timedelta(minutes=minutes)
     try:
         await member.timeout(until, reason=f"{ctx.author} | {reason}")
         logger.info(f"Mute verildi | mod={ctx.author.id} user={member.id} min={minutes} reason={reason}")
@@ -617,7 +736,7 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
             title="🔇 İstifadəçi Mute Edildi (Timeout)",
             description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Müddət:** `{minutes} dəqiqə`\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
             color=0xE67E22,
-            timestamp=datetime.utcnow()
+            timestamp=discord.utils.utcnow()
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_footer(text=f"Müddət bitmə vaxtı: {(until).strftime('%H:%M:%S UTC')} • abi-bot")
@@ -1014,11 +1133,528 @@ async def komandalar(ctx):
     await ctx.send(embed=embed)
 
 
+# ==================== SLASH COMMANDS (/) ====================
+
+@bot.tree.command(name="profil", description="İstifadəçinin səs aktivliyi və statistikasını göstərir.")
+@app_commands.describe(member="Profilinə baxmaq istədiyiniz üzv (boş qoysanız özünüz)")
+async def slash_profil(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    user = db.get_user(target.id)
+
+    base_total = int(user["total_seconds"]) if user else 0
+    today_seconds = db.get_today(target.id)
+    week_seconds = db.get_week(target.id)
+    month_seconds = db.get_month(target.id)
+    first_seen = user["first_seen"] if user and user.get("first_seen") else datetime.utcnow().strftime("%d.%m.%Y")
+
+    live_seconds = get_live_seconds(target.id)
+    is_in_voice = live_seconds > 0
+    if is_in_voice:
+        base_total += live_seconds
+        today_seconds += live_seconds
+        week_seconds += live_seconds
+        month_seconds += live_seconds
+
+    combined = get_combined_totals()
+    rank = None
+    for index, row in enumerate(combined, start=1):
+        if row["user_id"] == target.id:
+            rank = index
+            break
+
+    if rank is None:
+        db_rank = db.get_rank(target.id)
+        rank = db_rank if db_rank is not None else "—"
+
+    status_str = "🟢 Hal-hazırda səsdədir" if is_in_voice else "⚪ Səsdə deyil"
+    avatar_url = target.display_avatar.url if target.display_avatar else discord.Embed.Empty
+
+    embed = discord.Embed(
+        title=f"🎙️ Səs Statistikası — {target.display_name}",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=avatar_url)
+    embed.description = f"**Status:** `{status_str}`\n**Səs Sıralaması:** `🏆 #{rank}`"
+    embed.add_field(name="⏱️ Ümumi Aktivlik", value=f"```fix\n{format_time(base_total)}\n```", inline=False)
+    embed.add_field(name="📅 Bu gün", value=f"⏱️ `{format_time(today_seconds)}`", inline=True)
+    embed.add_field(name="📆 Bu həftə", value=f"⏱️ `{format_time(week_seconds)}`", inline=True)
+    embed.add_field(name="🗓️ Bu ay", value=f"⏱️ `{format_time(month_seconds)}`", inline=True)
+    embed.set_footer(text=f"İlk aktivlik: {first_seen} • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="top", description="Serverin səs liderləri cədvəlini göstərir.")
+@app_commands.describe(say="Göstəriləcək üzv sayı (məs: 10)")
+async def slash_top(interaction: discord.Interaction, say: int = 10):
+    say = max(1, min(say, 25))
+    leaderboard = get_combined_totals()
+    top_rows = leaderboard[:say]
+
+    if not top_rows:
+        await interaction.response.send_message("📭 Hələ heç bir səs statistikası qeydə alınmayıb.", ephemeral=True)
+        return
+
+    lines = []
+    for index, row in enumerate(top_rows, start=1):
+        medal = get_medal(index)
+        is_live = row["user_id"] in voice_sessions
+        live_dot = "🟢 " if is_live else ""
+        display_name = row.get("display_name") or row.get("username") or "Naməlum"
+        total_seconds = int(row.get("total_seconds") or 0)
+        lines.append(f"{medal} {live_dot}**{display_name}** ➔ `{format_time(total_seconds)}`")
+
+    embed = discord.Embed(
+        title=f"🏆 Səs Liderləri Top {len(top_rows)}",
+        description="\n".join(lines),
+        color=0xFEE75C,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text="🟢 = Hal-hazırda səsdədir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="seviyye", description="İstifadəçinin cari Level və XP kartını göstərir.")
+@app_commands.describe(member="Levelinə baxmaq istədiyiniz üzv")
+async def slash_seviyye(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    user = db.get_user(target.id)
+
+    current_level = int(user.get("level") or 1) if user else 1
+    current_xp = int(user.get("xp") or 0) if user else 0
+    next_level_xp = db.xp_for_level(current_level + 1)
+    needed_xp = max(next_level_xp - current_xp, 0)
+    progress_bar = build_progress_bar(current_xp, current_level)
+
+    embed = discord.Embed(
+        title=f"⭐ Səviyyə Profili — {target.display_name}",
+        color=0x9B59B6,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Cari Səviyyə:** `🏅 Səviyyə {current_level}`"
+    embed.add_field(name="✨ Təcrübə (XP)", value=f"```yaml\nCari XP: {current_xp} / {next_level_xp}\nNövbəti səviyyəyə: {needed_xp} XP qaldı\n```", inline=False)
+    embed.add_field(name="📈 Səviyyə İrəliləyişi", value=progress_bar, inline=False)
+    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP verilir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="xptop", description="Serverin ən yüksək səviyyəli üzvlərinin liderlik cədvəli.")
+@app_commands.describe(say="Göstəriləcək üzv sayı (məs: 10)")
+async def slash_xptop(interaction: discord.Interaction, say: int = 10):
+    say = max(1, min(say, 25))
+    rows = db.get_level_leaderboard(say)
+    if not rows:
+        await interaction.response.send_message("📭 Hələ heç bir XP qeydi mövcud deyil.", ephemeral=True)
+        return
+
+    lines = []
+    for index, row in enumerate(rows, start=1):
+        medal = get_medal(index)
+        display_name = row.get("display_name") or row.get("username") or "Naməlum"
+        level = int(row.get("level") or 1)
+        xp = int(row.get("xp") or 0)
+        lines.append(f"{medal} **{display_name}** ➔ `Lv.{level}` • `{xp:,} XP`")
+
+    embed = discord.Embed(
+        title=f"⭐ XP & Səviyyə Liderləri Top {len(rows)}",
+        description="\n".join(lines),
+        color=0x9B59B6,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text="Səsdə qalaraq səviyyənizi artırın • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="userinfo", description="İstifadəçi haqqında ətraflı məlumat göstərir.")
+@app_commands.describe(member="Məlumatına baxmaq istədiyiniz üzv")
+async def slash_userinfo(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    created = target.created_at.strftime("%d.%m.%Y • %H:%M UTC") if target.created_at else "-"
+    joined = target.joined_at.strftime("%d.%m.%Y • %H:%M UTC") if target.joined_at else "-"
+    roles = [r.mention for r in target.roles if r.name != "@everyone"]
+    roles_str = ", ".join(roles[:8]) if roles else "Rol yoxdur"
+    if len(roles) > 8:
+        roles_str += f" (+{len(roles)-8} rol)"
+
+    embed = discord.Embed(
+        title=f"👤 İstifadəçi Məlumatı — {target.display_name}",
+        color=0x3498DB,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.add_field(name="🏷️ Tag", value=f"`{target}`", inline=True)
+    embed.add_field(name="🆔 ID", value=f"`{target.id}`", inline=True)
+    embed.add_field(name="👑 Ən Yüksək Rol", value=target.top_role.mention, inline=True)
+    embed.add_field(name="📅 Qeydiyyat Tarixi", value=f"`{created}`", inline=True)
+    embed.add_field(name="📥 Serverə Qoşuldu", value=f"`{joined}`", inline=True)
+    embed.add_field(name="🎭 Bütün Rollar", value=roles_str, inline=False)
+    embed.set_footer(text=f"Sorğulayan: {interaction.user.display_name} • abi-bot", icon_url=interaction.user.display_avatar.url)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="avatar", description="İstifadəçinin böyüdülmüş profil şəklini göstərir.")
+@app_commands.describe(member="Avatarına baxmaq istədiyiniz üzv")
+async def slash_avatar(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    embed = discord.Embed(
+        title=f"🖼️ {target.display_name} — Avatar",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url=target.display_avatar.url)
+    embed.set_footer(text=f"Sorğulayan: {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="serverinfo", description="Server haqqında əsas statistik məlumatları göstərir.")
+async def slash_serverinfo(interaction: discord.Interaction):
+    guild = interaction.guild
+    if not guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+
+    text_count = len(guild.text_channels)
+    voice_count = len(guild.voice_channels)
+    category_count = len(guild.categories)
+    member_count = guild.member_count or 0
+    created = guild.created_at.strftime("%d.%m.%Y • %H:%M UTC") if guild.created_at else "-"
+    owner = guild.owner.mention if guild.owner else "Naməlum"
+
+    embed = discord.Embed(
+        title=f"🏠 Server Məlumatı — {guild.name}",
+        color=0x2ECC71,
+        timestamp=datetime.utcnow()
+    )
+    if guild.icon:
+        embed.set_thumbnail(url=guild.icon.url)
+    
+    embed.add_field(name="👑 Server Sahibi", value=owner, inline=True)
+    embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
+    embed.add_field(name="👥 Ümumi Üzvlər", value=f"`{member_count:,}` üzv", inline=True)
+    embed.add_field(name="💬 Mətn Kanalları", value=f"`{text_count}` kanal", inline=True)
+    embed.add_field(name="🎙️ Səs Kanalları", value=f"`{voice_count}` kanal", inline=True)
+    embed.add_field(name="📁 Kateqoriyalar", value=f"`{category_count}` kateqoriya", inline=True)
+    embed.add_field(name="📅 Yaranma Tarixi", value=f"`{created}`", inline=False)
+    embed.set_footer(text=f"Server: {guild.name} • abi-bot", icon_url=guild.icon.url if guild.icon else None)
+
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="kick", description="İstifadəçini serverdən kənarlaşdırır (Kick).")
+@app_commands.checks.has_permissions(kick_members=True)
+@app_commands.describe(member="Serverdən atılacaq üzv", reason="Kick səbəbi")
+async def slash_kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Səbəb göstərilməyib"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini serverdən ata bilməzsən.", ephemeral=True)
+        return
+
+    try:
+        await member.kick(reason=f"{interaction.user} | {reason}")
+        embed = discord.Embed(
+            title="👢 Üzv Serverdən Atıldı (Kick)",
+            description=f"**Atılan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {interaction.user.mention}",
+            color=0xE67E22,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        await send_mod_log(interaction.guild, embed)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Botun bu istifadəçini atmağa (kick) icazəsi yoxdur (Rol iyerarxiyasını yoxlayın).", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="ban", description="İstifadəçini serverdən qadağan edir (Ban).")
+@app_commands.checks.has_permissions(ban_members=True)
+@app_commands.describe(member="Serverdən ban ediləcək üzv", reason="Ban səbəbi")
+async def slash_ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Səbəb göstərilməyib"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.", ephemeral=True)
+        return
+
+    try:
+        await member.ban(reason=f"{interaction.user} | {reason}", delete_message_days=0)
+        embed = discord.Embed(
+            title="🔨 Üzv Ban Edildi",
+            description=f"**Banlanan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {interaction.user.mention}",
+            color=0xED4245,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        await send_mod_log(interaction.guild, embed)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Botun bu istifadəçini ban etməyə səlahiyyəti çatmır.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="mute", description="İstifadəçiyə timeout tətbiq edir (Mute).")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.describe(member="Timeout veriləcək üzv", minutes="Müddət (dəqiqə ilə)", reason="Mute səbəbi")
+async def slash_mute(interaction: discord.Interaction, member: discord.Member, minutes: int = 10, reason: str = "Səbəb göstərilməyib"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçiyə timeout verə bilməzsən.", ephemeral=True)
+        return
+
+    minutes = max(1, min(minutes, 40320))
+    until = discord.utils.utcnow() + timedelta(minutes=minutes)
+    try:
+        await member.timeout(until, reason=f"{interaction.user} | {reason}")
+        embed = discord.Embed(
+            title="🔇 İstifadəçi Mute Edildi (Timeout)",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Müddət:** `{minutes} dəqiqə`\n**Səbəb:** {reason}\n**Moderator:** {interaction.user.mention}",
+            color=0xE67E22,
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.set_footer(text=f"Müddət bitmə vaxtı: {(until).strftime('%H:%M:%S UTC')} • abi-bot")
+        await interaction.response.send_message(embed=embed)
+        await send_mod_log(interaction.guild, embed)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Botun bu istifadəçiyə timeout verməyə səlahiyyəti çatmır.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="unmute", description="İstifadəçinin timeout cəzasını qaldırır.")
+@app_commands.checks.has_permissions(moderate_members=True)
+@app_commands.describe(member="Timeout-u açılacaq üzv")
+async def slash_unmute(interaction: discord.Interaction, member: discord.Member):
+    try:
+        await member.timeout(None, reason=f"{interaction.user} tərəfindən unmute")
+        embed = discord.Embed(
+            title="🔊 Timeout Qaldırıldı (Unmute)",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {interaction.user.mention}",
+            color=0x57F287,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        await send_mod_log(interaction.guild, embed)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Botun timeout-u açmağa yetkisi yoxdur.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
+
+
+@bot.tree.command(name="temizle", description="Kanaldakı mesajları toplu silir.")
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(say="Silinəcək mesaj sayı (maksimum 100)")
+async def slash_temizle(interaction: discord.Interaction, say: int = 10):
+    say = max(1, min(say, 100))
+    await interaction.response.defer(ephemeral=True)
+    deleted = await interaction.channel.purge(limit=say)
+    
+    embed = discord.Embed(
+        title="🧹 Mesajlar Təmizləndi",
+        description=f"**Kanal:** {interaction.channel.mention}\n**Silinən Mesaj Sayı:** `{len(deleted)}` ədəd",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"İcra edən: {interaction.user.display_name}")
+    await interaction.followup.send(embed=embed, ephemeral=True)
+    await send_mod_log(interaction.guild, embed)
+
+
+@bot.tree.command(name="warn", description="İstifadəçiyə rəsmi xəbərdarlıq qeyd edir.")
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(member="Xəbərdarlıq veriləcək üzv", reason="Xəbərdarlıq səbəbi")
+async def slash_warn(interaction: discord.Interaction, member: discord.Member, reason: str = "Səbəb göstərilməyib"):
+    db.upsert_user_identity(member.id, member.name, member.display_name)
+    db.upsert_user_identity(interaction.user.id, interaction.user.name, interaction.user.display_name)
+    db.add_warning(member.id, interaction.user.id, reason)
+    total_warns = db.get_warning_count(member.id)
+
+    auto_punishment_note = ""
+    if total_warns == 3:
+        timeout_until = discord.utils.utcnow() + timedelta(hours=1)
+        try:
+            await member.timeout(timeout_until, reason="3 xəbərdarlığa çatdı (Avtomatik 1 saat Mute)")
+            auto_punishment_note = "\n\n⚠️ **Avtomatik Cəza:** İstifadəçi 3 xəbərdarlığa çatdığı üçün **1 saatlıq Mute (Timeout)** edildi!"
+        except Exception:
+            pass
+    elif total_warns >= 5:
+        timeout_until = discord.utils.utcnow() + timedelta(days=1)
+        try:
+            await member.timeout(timeout_until, reason="5 və ya daha çox xəbərdarlıq (Avtomatik 24 saat Mute)")
+            auto_punishment_note = f"\n\n🚨 **Avtomatik Cəza:** İstifadəçi {total_warns} xəbərdarlığa çatdığı üçün **24 saatlıq Mute (Timeout)** edildi!"
+        except Exception:
+            pass
+
+    embed = discord.Embed(
+        title="⚠️ Xəbərdarlıq (Warn) Verildi",
+        description=f"**Cəzalandırılan:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Ümumi Xəbərdarlıq Sayı:** `{total_warns}`{auto_punishment_note}\n**Moderator:** {interaction.user.mention}",
+        color=0xFEE75C if total_warns < 3 else 0xED4245,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    embed.set_footer(text=f"Ümumi: {total_warns} xəbərdarlıq • abi-bot")
+    await interaction.response.send_message(embed=embed)
+    await send_mod_log(interaction.guild, embed)
+
+
+@bot.tree.command(name="warnings", description="İstifadəçinin xəbərdarlıq tarixçəsini göstərir.")
+@app_commands.describe(member="Xəbərdarlıqlarına baxılacaq üzv (boş qoysanız özünüz)")
+async def slash_warnings(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    rows = db.get_warnings(target.id, limit=10)
+    total_count = db.get_warning_count(target.id)
+
+    if not rows:
+        embed = discord.Embed(
+            title=f"✅ {target.display_name} — Xəbərdarlıqlar",
+            description="Bu istifadəçi üçün heç bir xəbərdarlıq qeydə alınmayıb.",
+            color=0x57F287,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+        return
+
+    lines = []
+    for row in rows:
+        reason = row.get("reason") or "Səbəb yoxdur"
+        mod_id = row.get("moderator_id")
+        date = row.get("date") or "-"
+        lines.append(f"• `#{row['id']}` `[{date}]` — Mod: <@{mod_id}>\n  └ **Səbəb:** {reason}")
+
+    embed = discord.Embed(
+        title=f"⚠️ {target.display_name} — Xəbərdarlıq Tarixçəsi",
+        description=f"**Ümumi Xəbərdarlıq:** `{total_count}` ədəd\n\n" + "\n\n".join(lines),
+        color=0xFAA61A,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.set_footer(text="Silmək üçün: /delwarn və ya /clearwarn • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="delwarn", description="Xüsusi ID-li bir xəbərdarlığı silir.")
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(warning_id="Silinəcək xəbərdarlığın ID nömrəsi (məs: 3)")
+async def slash_delwarn(interaction: discord.Interaction, warning_id: int):
+    success = db.delete_warning(warning_id)
+    if success:
+        await interaction.response.send_message(f"✅ `#{warning_id}` nömrəli xəbərdarlıq uğurla silindi.")
+    else:
+        await interaction.response.send_message(f"❌ `#{warning_id}` nömrəli xəbərdarlıq tapılmadı.", ephemeral=True)
+
+
+@bot.tree.command(name="clearwarn", description="İstifadəçinin bütün xəbərdarlıqlarını təmizləyir.")
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(member="Bütün xəbərdarlıqları təmizlənəcək üzv")
+async def slash_clearwarn(interaction: discord.Interaction, member: discord.Member):
+    count = db.clear_warnings(member.id)
+    if count > 0:
+        await interaction.response.send_message(f"✅ {member.mention} istifadəçisinin bütün (`{count}` ədəd) xəbərdarlıqları silindi.")
+    else:
+        await interaction.response.send_message(f"❌ {member.mention} üçün silinəcək aktiv xəbərdarlıq tapılmadı.", ephemeral=True)
+
+
+@bot.tree.command(name="setlog", description="Audit & Mod Loglarının göndəriləcəyi kanalı təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(channel="Log mesajlarının göndəriləcəyi mətn kanalı")
+async def slash_setlog(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+
+    db.set_guild_setting(interaction.guild.id, "mod_log_channel", str(channel.id))
+    embed = discord.Embed(
+        title="⚙️ Log Kanalı Təyin Edildi",
+        description=f"✅ Mod və Audit logları artıq {channel.mention} kanalına göndəriləcək.",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="setchannel", description="Botun avtomatik bildiriş kanallarını təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(
+    type="Quraşdırmaq istədiyiniz bildiriş növü",
+    channel="Təyin ediləcək mətn kanalı"
+)
+@app_commands.choices(type=[
+    app_commands.Choice(name="📜 Mod & Audit Log Kanalı", value="mod_log_channel"),
+    app_commands.Choice(name="🎉 Səviyyə (Level-Up) Bildiriş Kanalı", value="levelup_channel"),
+    app_commands.Choice(name="🌙 Günlük Səs Hesabatı Kanalı", value="report_channel")
+])
+async def slash_setchannel(interaction: discord.Interaction, type: app_commands.Choice[str], channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+
+    db.set_guild_setting(interaction.guild.id, type.value, str(channel.id))
+    embed = discord.Embed(
+        title="⚙️ Kanal Quraşdırması Uğurlu",
+        description=f"✅ **{type.name}** üçün təyin edilmiş kanal: {channel.mention}",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="setlog")
+@commands.has_permissions(administrator=True)
+async def prefix_setlog(ctx, channel: discord.TextChannel):
+    # Prefix ilə log kanalını təyin edirik
+    db.set_guild_setting(ctx.guild.id, "mod_log_channel", str(channel.id))
+    await send_success_card(
+        ctx,
+        "Log Kanalı Təyin Edildi",
+        f"✅ Mod və Audit logları artıq {channel.mention} kanalına göndəriləcək."
+    )
+
+
+
+
+@bot.tree.command(name="komandalar", description="Botun bütün əmrlərinin siyahısını və bələdçisini göstərir.")
+async def slash_komandalar(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🤖 abi-bot — Komanda Bələdçisi",
+        description="Botun bütün əmrləri aşağıdakı kateqoriyalara bölünüb.\nHəm **`/` (Slash)**, həm də **`abi `** prefix-i ilə istifadə edə bilərsiniz.",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    if bot.user:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+
+    embed.add_field(
+        name="🎙️ Səs & Aktivlik Statistikası",
+        value="• `/profil` — Səs aktivliyi və sıralama profili\n• `/top` — Ən çox səsdə qalanların lider cədvəli\n• `abi hesabat [gun/hefte/ay]` — Periodik hesabat",
+        inline=False
+    )
+    embed.add_field(
+        name="⭐ Səviyyə & XP Sistemi",
+        value="• `/seviyye` — Level, XP kartı və tərəqqi çubuğu\n• `/xptop` — Ən yüksək səviyyəli üzvlər",
+        inline=False
+    )
+    embed.add_field(
+        name="🛡️ Moderasiya & Təhlükəsizlik",
+        value="• `/kick` — Üzvü serverdən atır\n• `/ban` — Üzvü ban edir\n• `/mute` — Timeout verir\n• `/unmute` — Timeout-u qaldırır\n• `/temizle` — Mesajları toplu silir\n• `abi warn` / `abi warnings` — Xəbərdarlıq sistemi",
+        inline=False
+    )
+    embed.add_field(
+        name="🧰 Köməkçi & Digər",
+        value="• `/userinfo` — İstifadəçi haqqında məlumat\n• `/serverinfo` — Server statistikası\n• `/avatar` — Profil şəkli\n• `abi poll` — Sorğu\n• `abi sifirla` — Səs sıfırlama",
+        inline=False
+    )
+    embed.set_footer(text="Developed for your server • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+    await interaction.response.send_message(embed=embed)
+
+
+
 @tasks.loop(minutes=5)
 async def xp_task():
     # Hər 5 dəqiqədə səsdə olan istifadəçilərə XP veririk
-    level_channel = bot.get_channel(LEVEL_UP_CHANNEL_ID)
-
     for user_id in list(voice_sessions.keys()):
         if not isinstance(user_id, int):
             continue
@@ -1065,13 +1701,20 @@ async def xp_task():
                         except Exception as error:
                             logger.warning(f"Level rolu verilə bilmədi | user={member.id} role={role_id} err={error}")
 
-            if level_channel is not None:
-                embed = discord.Embed(
-                    title="🎉 Səviyyə Yüksəldi!",
-                    description=f"{member.mention} səviyyə **{new_level}**-ə çatdı!",
-                    color=0xFFD700,
-                )
-                await level_channel.send(embed=embed)
+            if member.guild:
+                lvl_chan_id = db.get_guild_setting(member.guild.id, "levelup_channel") or LEVEL_UP_CHANNEL_ID
+                if lvl_chan_id:
+                    try:
+                        lvl_chan = member.guild.get_channel(int(lvl_chan_id))
+                        if lvl_chan:
+                            embed = discord.Embed(
+                                title="🎉 Səviyyə Yüksəldi!",
+                                description=f"{member.mention} səviyyə **{new_level}**-ə çatdı!",
+                                color=0xFFD700,
+                            )
+                            await lvl_chan.send(embed=embed)
+                    except Exception:
+                        pass
 
 
 @xp_task.before_loop
@@ -1082,23 +1725,40 @@ async def before_xp_task():
 
 @tasks.loop(hours=24)
 async def daily_report():
-    # Hər 24 saatdan bir günlük hesabat göndəririk
-    channel = bot.get_channel(REPORT_CHANNEL_ID)
-    if channel is None:
-        logger.warning("Daily report kanalı tapılmadı.")
-        return
+    # Hər 24 saatdan bir hər serverə öz günlük hesabatını göndəririk
+    for guild in bot.guilds:
+        rep_chan_id = db.get_guild_setting(guild.id, "report_channel") or REPORT_CHANNEL_ID
+        if not rep_chan_id:
+            continue
 
-    rows = db.get_period_leaderboard("gun", 10)
-    if not rows:
-        description = "📭 Bu gün üçün statistik məlumat yoxdur."
-    else:
-        lines = []
-        for index, row in enumerate(rows, start=1):
-            medal = get_medal(index)
-            display_name = row.get("display_name") or row.get("username") or "Naməlum"
-            total_seconds = int(row.get("total_seconds") or 0)
-            lines.append(f"{medal} **{display_name}** — {format_time(total_seconds)}")
-        description = "\n".join(lines)
+        try:
+            channel = guild.get_channel(int(rep_chan_id))
+            if channel is None:
+                continue
+
+            rows = db.get_period_leaderboard("gun", 10)
+            if not rows:
+                description = "📭 Bu gün üçün statistik məlumat yoxdur."
+            else:
+                lines = []
+                for index, row in enumerate(rows, start=1):
+                    medal = get_medal(index)
+                    display_name = row.get("display_name") or row.get("username") or "Naməlum"
+                    total_seconds = int(row.get("total_seconds") or 0)
+                    lines.append(f"{medal} **{display_name}** — {format_time(total_seconds)}")
+                description = "\n".join(lines)
+
+            today_footer = datetime.utcnow().strftime("%d.%m.%Y")
+            embed = discord.Embed(
+                title="🌙 Günlük Avtomatik Hesabat",
+                description=description,
+                color=0xEB459E,
+            )
+            embed.set_footer(text=today_footer)
+            await channel.send(embed=embed)
+        except Exception as e:
+            logger.warning(f"Günlük hesabat göndərilmədi ({guild.id}): {e}")
+
 
     today_footer = datetime.utcnow().strftime("%d.%m.%Y")
 
