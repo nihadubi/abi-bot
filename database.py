@@ -522,6 +522,32 @@ class Database:
             print(f"[DB Xətası] Xəbərdarlıq sayı alınmadı: {error}")
             return 0
 
+    def get_warning_leaderboard(self, limit=10):
+        # Warn-u olan istifadəçiləri ümumi sayına görə sıralayırıq
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT
+                        warnings.user_id,
+                        COALESCE(users.display_name, users.username, 'Naməlum') AS display_name,
+                        COUNT(*) AS warning_count,
+                        MAX(warnings.date) AS latest_warning
+                    FROM warnings
+                    LEFT JOIN users ON users.user_id = warnings.user_id
+                    GROUP BY warnings.user_id
+                    ORDER BY warning_count DESC, latest_warning DESC, warnings.user_id ASC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Warn lider cədvəli alınmadı: {error}")
+            return []
+
     def delete_warning(self, warning_id):
         # ID üzrə xüsusi xəbərdarlığı silirik
         try:

@@ -7,7 +7,7 @@ A feature-rich Discord bot built with `discord.py` for voice activity tracking, 
 - 🎙️ Voice activity tracking (total/daily/weekly/monthly)
 - 📊 Leaderboards
 - ⭐ XP + level system for voice participation
-- 🛡️ Moderation commands (`warn`, `warnings`, `temizle`, `mute`, `unmute`, `kick`, `ban`, `unban`)
+- 🛡️ Moderation commands (`warn`, `warnings`, `sil`, `mute`, `unmute`, `kick`, `ban`, `unban`)
 - 📜 Audit & Mod Log system (message delete/edit, voice events, moderation actions, member join/leave)
 - 🚫 Anti-link and anti-spam protection
 - 🧰 Utility commands (`userinfo`, `serverinfo`, `avatar`, `poll`)
@@ -82,7 +82,8 @@ python -m py_compile bot.py database.py
 ### Moderation
 - `abi warn @user [reason]`
 - `abi warnings [@user]`
-- `abi temizle [count]`
+- `abi warnlar [count]`
+- `abi sil [count]`
 - `abi mute @user [minutes] [reason]`
 - `abi unmute @user`
 - `abi kick @user [reason]`

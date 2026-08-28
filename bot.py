@@ -61,6 +61,24 @@ spam_tracker = defaultdict(deque)
 # XP anti-farm üçün son mükafat vaxtını saxlayırıq
 last_xp_award = {}
 
+BRAND_COLOR = 0x5865F2
+SUCCESS_COLOR = 0x57F287
+WARNING_COLOR = 0xFEE75C
+ERROR_COLOR = 0xED4245
+
+
+def truncate_text(value: str, limit: int = 900) -> str:
+    """Discord embed sahələrini oxunaqlı və limit daxilində saxlayır."""
+    value = value or ""
+    return value if len(value) <= limit else f"{value[:limit - 1]}…"
+
+
+def build_audit_embed(title: str, color: int, member: discord.abc.User):
+    embed = discord.Embed(title=title, color=color, timestamp=datetime.utcnow())
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    embed.set_footer(text="abi-bot • Audit Log")
+    return embed
+
 
 async def send_mod_log(guild: discord.Guild, embed: discord.Embed):
     # Log kanalına embed göndəririk (Server tənzimləməsi və ya MOD_LOG_CHANNEL_ID əsasında)
@@ -105,14 +123,14 @@ async def send_error_card(ctx, title: str, description: str):
     embed = discord.Embed(
         title=f"❌ {title}",
         description=description,
-        color=0xED4245,
+        color=ERROR_COLOR,
         timestamp=datetime.utcnow()
     )
     embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
     await ctx.send(embed=embed)
 
 
-async def send_success_card(ctx, title: str, description: str, color: int = 0x57F287):
+async def send_success_card(ctx, title: str, description: str, color: int = SUCCESS_COLOR):
     # Gözəl yaşıl uğur kartı
     embed = discord.Embed(
         title=title,
@@ -127,9 +145,11 @@ async def send_success_card(ctx, title: str, description: str, color: int = 0x57
 COMMAND_GUIDANCE = {
     "warn": ("`abi warn @istifadəçi [səbəb]`", "`abi warn @Nihad Spam paylaşdı`"),
     "warnings": ("`abi warnings [@istifadəçi]`", "`abi warnings @Nihad`"),
+    "warnlar": ("`abi warnlar [say]`", "`abi warnlar 10`"),
     "delwarn": ("`abi delwarn [warn ID]`", "`abi delwarn 12`"),
     "clearwarn": ("`abi clearwarn @istifadəçi`", "`abi clearwarn @Nihad`"),
-    "temizle": ("`abi temizle [say]`", "`abi temizle 25`"),
+    "sil": ("`abi sil [say]`", "`abi sil 25`"),
+    "temizle": ("`abi sil [say]`", "`abi sil 25`"),
     "mute": ("`abi mute @istifadəçi [dəqiqə] [səbəb]`", "`abi mute @Nihad 30 Təhqir`"),
     "unmute": ("`abi unmute @istifadəçi`", "`abi unmute @Nihad`"),
     "kick": ("`abi kick @istifadəçi [səbəb]`", "`abi kick @Nihad Qaydaları pozdu`"),
@@ -277,12 +297,10 @@ async def on_voice_state_update(member, before, after):
     # Səsə qoşulma halında sessiyanı başladırıq
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = datetime.utcnow()
-        embed = discord.Embed(
-            description=f"🎙️ {member.mention} **{after.channel.name}** səs kanalına qoşuldu.",
-            color=0x2ECC71,
-            timestamp=datetime.utcnow()
-        )
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed = build_audit_embed("🎙️ Səs Kanalına Qoşuldu", SUCCESS_COLOR, member)
+        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
+        embed.add_field(name="Kanal", value=after.channel.mention, inline=True)
+        embed.add_field(name="Hadisə", value="Səs kanalına qoşuldu", inline=False)
         await send_mod_log(member.guild, embed)
         return
 
@@ -296,40 +314,90 @@ async def on_voice_state_update(member, before, after):
                 db.add_voice_time(member.id, member.name, member.display_name, seconds)
             voice_sessions.pop(member.id, None)
 
-        embed = discord.Embed(
-            description=f"🚪 {member.mention} **{before.channel.name}** səs kanalından ayrıldı." + (f" (Müddət: {format_time(seconds)})" if seconds > 0 else ""),
-            color=0xE74C3C,
-            timestamp=datetime.utcnow()
-        )
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed = build_audit_embed("🚪 Səs Kanalından Ayrıldı", ERROR_COLOR, member)
+        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
+        embed.add_field(name="Kanal", value=before.channel.mention, inline=True)
+        embed.add_field(name="Sessiya Müddəti", value=f"`{format_time(seconds)}`" if seconds > 0 else "Qeyd olunmayıb", inline=False)
         await send_mod_log(member.guild, embed)
         return
 
     # Kanal dəyişməsi
     if before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
-        embed = discord.Embed(
-            description=f"🔄 {member.mention} kanal dəyişdi: **{before.channel.name}** ➔ **{after.channel.name}**",
-            color=0x3498DB,
-            timestamp=datetime.utcnow()
-        )
-        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed = build_audit_embed("🔄 Səs Kanalı Dəyişdi", BRAND_COLOR, member)
+        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=False)
+        embed.add_field(name="Əvvəlki Kanal", value=before.channel.mention, inline=True)
+        embed.add_field(name="Yeni Kanal", value=after.channel.mention, inline=True)
         await send_mod_log(member.guild, embed)
         return
 
 
-@bot.event
-async def on_message_delete(message: discord.Message):
-    if message.author.bot or not message.guild:
+async def log_deleted_message(message: discord.Message, bulk_delete: bool = False):
+    """Tək və ya toplu silinən bütün mesajları audit kanalına yazır."""
+    if not message.guild:
         return
 
-    embed = discord.Embed(
-        title="🗑️ Mesaj Silindi",
-        description=f"**Müəllif:** {message.author.mention} (`{message.author.id}`)\n**Kanal:** {message.channel.mention}\n**Məzmun:**\n{message.content or '*[Mətn yoxdur / Fayl və ya Embed]*'}",
-        color=0xE74C3C,
-        timestamp=datetime.utcnow()
+    embed = build_audit_embed("🗑️ Mesaj Silindi", ERROR_COLOR, message.author)
+    embed.add_field(name="Müəllif", value=f"{message.author.mention}\n`{message.author.id}`", inline=True)
+    embed.add_field(name="Kanal", value=message.channel.mention, inline=True)
+    embed.add_field(
+        name="Məzmun",
+        value=truncate_text(message.content or "[Mətn yoxdur — fayl və ya embed]"),
+        inline=False,
     )
-    embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+    if bulk_delete:
+        embed.add_field(name="Silmə Növü", value="Toplu təmizləmə", inline=True)
+    embed.set_footer(text=f"abi-bot • Audit Log • Message ID: {message.id}")
     await send_mod_log(message.guild, embed)
+
+
+@bot.event
+async def on_message_delete(message: discord.Message):
+    await log_deleted_message(message)
+
+
+@bot.event
+async def on_bulk_message_delete(messages):
+    # `abi sil` kimi purge əməliyyatları tək-tək deyil, bu event ilə gəlir.
+    for message in messages:
+        await log_deleted_message(message, bulk_delete=True)
+
+
+async def log_uncached_delete(guild_id: int, channel_id: int, message_id: int, bulk_delete: bool = False):
+    """Cache-də olmayan silinmiş mesajın mövcud metadata-sını loglayır."""
+    guild = bot.get_guild(guild_id)
+    if guild is None:
+        return
+
+    channel = guild.get_channel(channel_id)
+    channel_value = channel.mention if channel else f"`{channel_id}`"
+    embed = discord.Embed(title="🗑️ Mesaj Silindi", color=ERROR_COLOR, timestamp=datetime.utcnow())
+    embed.add_field(name="Kanal", value=channel_value, inline=True)
+    embed.add_field(name="Mesaj ID", value=f"`{message_id}`", inline=True)
+    embed.add_field(
+        name="Məzmun",
+        value="[Mesaj cache-də olmadığı üçün məzmun və müəllif mövcud deyil]",
+        inline=False,
+    )
+    if bulk_delete:
+        embed.add_field(name="Silmə Növü", value="Toplu təmizləmə", inline=True)
+    embed.set_footer(text="abi-bot • Audit Log")
+    await send_mod_log(guild, embed)
+
+
+@bot.event
+async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
+    # Cache-də olan mesajlar artıq on_message_delete ilə yazılır.
+    if payload.guild_id and payload.cached_message is None:
+        await log_uncached_delete(payload.guild_id, payload.channel_id, payload.message_id)
+
+
+@bot.event
+async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent):
+    # Cache-də olmayanları ayrıca yazırıq ki, toplu silinmədə heç bir ID itirilməsin.
+    cached_ids = {message.id for message in payload.cached_messages}
+    if payload.guild_id:
+        for message_id in payload.message_ids - cached_ids:
+            await log_uncached_delete(payload.guild_id, payload.channel_id, message_id, bulk_delete=True)
 
 
 @bot.event
@@ -339,13 +407,13 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     if before.content == after.content:
         return
 
-    embed = discord.Embed(
-        title="✏️ Mesaj Redaktə Edildi",
-        description=f"**Müəllif:** {before.author.mention} (`{before.author.id}`)\n**Kanal:** {before.channel.mention}\n[Mesaja keçid]({after.jump_url})\n\n**Əvvəl:**\n{before.content or '*[Boş]*'}\n\n**Sonra:**\n{after.content or '*[Boş]*'}",
-        color=0xF1C40F,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_author(name=str(before.author), icon_url=before.author.display_avatar.url)
+    embed = build_audit_embed("✏️ Mesaj Redaktə Edildi", WARNING_COLOR, before.author)
+    embed.add_field(name="Müəllif", value=f"{before.author.mention}\n`{before.author.id}`", inline=True)
+    embed.add_field(name="Kanal", value=before.channel.mention, inline=True)
+    embed.add_field(name="Əvvəl", value=truncate_text(before.content or "[Boş]", 700), inline=False)
+    embed.add_field(name="Sonra", value=truncate_text(after.content or "[Boş]", 700), inline=False)
+    embed.add_field(name="Mesaja Keçid", value=f"[Mesajı aç]({after.jump_url})", inline=False)
+    embed.set_footer(text=f"abi-bot • Audit Log • Message ID: {after.id}")
     await send_mod_log(before.guild, embed)
 
 
@@ -714,6 +782,41 @@ async def warnings(ctx, member: discord.Member = None):
     await ctx.send(embed=embed)
 
 
+def build_warnlar_embed(rows):
+    if not rows:
+        return discord.Embed(
+            title="✅ Warn Cədvəli",
+            description="Hazırda heç bir aktiv warn qeydi yoxdur.",
+            color=SUCCESS_COLOR,
+            timestamp=datetime.utcnow(),
+        )
+
+    lines = []
+    for index, row in enumerate(rows, start=1):
+        medal = get_medal(index)
+        user_id = row["user_id"]
+        count = row["warning_count"]
+        latest_warning = row.get("latest_warning") or "-"
+        lines.append(f"{medal} <@{user_id}> — **`{count}` warn**\n└ Son warn: `{latest_warning}`")
+
+    embed = discord.Embed(
+        title=f"⚠️ Ümumi Warn Cədvəli • Top {len(rows)}",
+        description="\n\n".join(lines),
+        color=WARNING_COLOR,
+        timestamp=datetime.utcnow(),
+    )
+    embed.set_footer(text="Ətraflı tarixçə: abi warnings @istifadəçi • abi-bot")
+    return embed
+
+
+@bot.command(name="warnlar", aliases=["warntop"])
+@commands.has_permissions(manage_messages=True)
+async def warnlar(ctx, number: int = 10):
+    """Warn-u olan bütün istifadəçilərin sıralamasını göstərir."""
+    number = max(1, min(number, 25))
+    await ctx.send(embed=build_warnlar_embed(db.get_warning_leaderboard(number)))
+
+
 @bot.command(name="delwarn")
 @commands.has_permissions(manage_messages=True)
 async def delwarn(ctx, warning_id: int):
@@ -745,9 +848,9 @@ async def clearwarn(ctx, member: discord.Member):
 
 
 
-@bot.command(name="temizle")
+@bot.command(name="sil", aliases=["temizle"])
 @commands.has_permissions(manage_messages=True)
-async def temizle(ctx, amount: int = 10):
+async def sil(ctx, amount: int = 10):
     # Kanaldan mesajları toplu silirik
     amount = max(1, min(amount, 100))
     deleted = await ctx.channel.purge(limit=amount + 1)
@@ -906,28 +1009,20 @@ async def unban(ctx, user_id: int, *, reason: str = "Səbəb göstərilməyib"):
 @bot.event
 async def on_member_join(member: discord.Member):
     # Yeni üzv qatıldıqda loglayırıq
-    embed = discord.Embed(
-        title="📥 Üzv Qatıldı",
-        description=f"{member.mention} (`{member.id}`) serverə daxil oldu.\n**Hesab yaranma tarixi:** {member.created_at.strftime('%Y-%m-%d %H:%M UTC')}",
-        color=0x57F287,
-        timestamp=datetime.utcnow()
-    )
+    embed = build_audit_embed("📥 Üzv Qoşuldu", SUCCESS_COLOR, member)
+    embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
+    embed.add_field(name="Hesabın Yaradılma Tarixi", value=f"<t:{int(member.created_at.timestamp())}:F>", inline=True)
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
     await send_mod_log(member.guild, embed)
 
 
 @bot.event
 async def on_member_remove(member: discord.Member):
     # Üzv serverdən ayrıldıqda və ya atıldıqda loglayırıq
-    embed = discord.Embed(
-        title="📤 Üzv Ayrıldı",
-        description=f"**{member}** (`{member.id}`) serverdən ayrıldı.",
-        color=0xED4245,
-        timestamp=datetime.utcnow()
-    )
+    embed = build_audit_embed("📤 Üzv Ayrıldı", ERROR_COLOR, member)
+    embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
+    embed.add_field(name="Hadisə", value="Serverdən ayrıldı və ya çıxarıldı", inline=True)
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
     await send_mod_log(member.guild, embed)
 
 
@@ -1157,12 +1252,13 @@ async def komandalar(ctx):
         value=(
             "• `abi warn @user [səbəb]` — İstifadəçiyə xəbərdarlıq qeyd edir\n"
             "• `abi warnings [@user]` — Xəbərdarlıq tarixçəsini göstərir\n"
+            "• `abi warnlar [say]` — Warn-u olan istifadəçilərin ümumi cədvəli\n"
             "• `abi mute @user [dəq] [səbəb]` — Timeout (səs/yazı kəsmə)\n"
             "• `abi unmute @user` — Timeout-u vaxtından əvvəl qaldırır\n"
             "• `abi kick @user [səbəb]` — İstifadəçini serverdən atır\n"
             "• `abi ban @user [səbəb]` — İstifadəçini serverdən qadağan edir\n"
             "• `abi unban [ID] [səbəb]` — İstifadəçinin banını açır\n"
-            "• `abi temizle [say]` — Kanaldakı mesajları toplu silir"
+            "• `abi sil [say]` — Kanaldakı mesajları toplu silir"
         ),
         inline=False
     )
@@ -1212,6 +1308,15 @@ async def adminkomandalar(ctx, command_name: str = None):
                 "**İstifadə:** `abi warnings [@istifadəçi]`\n"
                 "Öz warn-larını və ya göstərilən istifadəçinin warn tarixçəsini göstərir.\n\n"
                 "**Nümunə:** `abi warnings @Nihad`"
+            ),
+        },
+        "warnlar": {
+            "title": "📊 Ümumi warn cədvəli",
+            "text": (
+                "**İstifadə:** `abi warnlar [say]`\n"
+                "**İcazə:** Mesajları idarə et\n\n"
+                "Warn-u olan bütün istifadəçiləri warn sayına görə sıralayır. Maksimum 25 nəticə göstərir.\n\n"
+                "**Nümunə:** `abi warnlar 10`"
             ),
         },
         "delwarn": {
@@ -1273,13 +1378,13 @@ async def adminkomandalar(ctx, command_name: str = None):
                 "**Nümunə:** `abi unban 123456789012345678 Səhv ban`"
             ),
         },
-        "temizle": {
-            "title": "🧽 Mesajları təmizləmək",
+        "sil": {
+            "title": "🧽 Mesajları silmək",
             "text": (
-                "**İstifadə:** `abi temizle [say]`\n"
+                "**İstifadə:** `abi sil [say]`\n"
                 "**İcazə:** Mesajları idarə et\n\n"
                 "Cari kanaldan 1–100 arası mesajı silir. Əmr mesajı da silinənlərə daxildir.\n\n"
-                "**Nümunə:** `abi temizle 25`"
+                "**Nümunə:** `abi sil 25`"
             ),
         },
         "setlog": {
@@ -1316,7 +1421,8 @@ async def adminkomandalar(ctx, command_name: str = None):
         await ctx.send(embed=embed)
         return
 
-    guide = guides.get(command_name.lower())
+    command_name = {"temizle": "sil"}.get(command_name.lower(), command_name.lower())
+    guide = guides.get(command_name)
     if not guide:
         await send_error_card(
             ctx,
@@ -1644,10 +1750,10 @@ async def slash_unmute(interaction: discord.Interaction, member: discord.Member)
         await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
 
 
-@bot.tree.command(name="temizle", description="Kanaldakı mesajları toplu silir.")
+@bot.tree.command(name="sil", description="Kanaldakı mesajları toplu silir.")
 @app_commands.checks.has_permissions(manage_messages=True)
 @app_commands.describe(say="Silinəcək mesaj sayı (maksimum 100)")
-async def slash_temizle(interaction: discord.Interaction, say: int = 10):
+async def slash_sil(interaction: discord.Interaction, say: int = 10):
     say = max(1, min(say, 100))
     await interaction.response.defer(ephemeral=True)
     deleted = await interaction.channel.purge(limit=say)
@@ -1734,6 +1840,14 @@ async def slash_warnings(interaction: discord.Interaction, member: discord.Membe
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.set_footer(text="Silmək üçün: /delwarn və ya /clearwarn • abi-bot")
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="warnlar", description="Warn-u olan istifadəçilərin ümumi cədvəlini göstərir.")
+@app_commands.checks.has_permissions(manage_messages=True)
+@app_commands.describe(say="Göstəriləcək istifadəçi sayı (maksimum 25)")
+async def slash_warnlar(interaction: discord.Interaction, say: int = 10):
+    say = max(1, min(say, 25))
+    await interaction.response.send_message(embed=build_warnlar_embed(db.get_warning_leaderboard(say)))
 
 
 @bot.tree.command(name="delwarn", description="Xüsusi ID-li bir xəbərdarlığı silir.")
@@ -1840,7 +1954,7 @@ async def slash_komandalar(interaction: discord.Interaction):
     )
     embed.add_field(
         name="🛡️ Moderasiya & Təhlükəsizlik",
-        value="• `/kick` — Üzvü serverdən atır\n• `/ban` — Üzvü ban edir\n• `/mute` — Timeout verir\n• `/unmute` — Timeout-u qaldırır\n• `/temizle` — Mesajları toplu silir\n• `abi warn` / `abi warnings` — Xəbərdarlıq sistemi",
+        value="• `/kick` — Üzvü serverdən atır\n• `/ban` — Üzvü ban edir\n• `/mute` — Timeout verir\n• `/unmute` — Timeout-u qaldırır\n• `/sil` — Mesajları toplu silir\n• `abi warn` / `abi warnings` / `abi warnlar` — Xəbərdarlıq sistemi",
         inline=False
     )
     embed.add_field(
