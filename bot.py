@@ -4,6 +4,7 @@ import os
 import re
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import discord
 from aiohttp import web
@@ -21,6 +22,7 @@ TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
 MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", 0))
+BASE_DIR = Path(__file__).resolve().parent
 
 # Moderasiya və anti-spam ayarları
 ANTI_SPAM_ENABLED = True
@@ -1936,10 +1938,20 @@ async def handle_ping(request):
     return web.Response(text="Bot 7/24 aktivdir!", content_type="text/plain")
 
 
+async def handle_terms(request):
+    return web.FileResponse(BASE_DIR / "terms.html")
+
+
+async def handle_privacy(request):
+    return web.FileResponse(BASE_DIR / "privacy.html")
+
+
 async def start_web_server():
     app = web.Application()
     app.router.add_get("/", handle_ping)
     app.router.add_get("/ping", handle_ping)
+    app.router.add_get("/terms", handle_terms)
+    app.router.add_get("/privacy", handle_privacy)
 
     port = int(os.getenv("PORT", 8080))
     runner = web.AppRunner(app)

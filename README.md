@@ -55,6 +55,15 @@ MOD_LOG_CHANNEL_ID=123456789012345678
 python bot.py
 ```
 
+## 📄 Terms and Privacy URLs
+
+When deployed on Render, use these URLs in the Discord Developer Portal:
+
+```text
+https://your-render-service.onrender.com/terms
+https://your-render-service.onrender.com/privacy
+```
+
 ## 🧪 Quick Check (Optional)
 
 ```bash
