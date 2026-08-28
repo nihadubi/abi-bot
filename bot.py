@@ -87,6 +87,30 @@ def is_link_message(content: str) -> bool:
     return bool(LINK_REGEX.search(content or ""))
 
 
+async def send_error_card(ctx, title: str, description: str):
+    # Gözəl qırmızı/narıncı xəta kartı
+    embed = discord.Embed(
+        title=f"❌ {title}",
+        description=description,
+        color=0xED4245,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
+
+async def send_success_card(ctx, title: str, description: str, color: int = 0x57F287):
+    # Gözəl yaşıl uğur kartı
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=color,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"İcra edən: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed)
+
+
 def format_time(seconds: int) -> str:
     # Saniyəni daha oxunaqlı mətnə çeviririk
     seconds = int(seconds)
@@ -340,17 +364,17 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bu əmri istifadə etmək üçün icazən yoxdur.")
+        await send_error_card(ctx, "İcazə Çatışmır", "Bu əmri istifadə etmək üçün tələb olunan yetkiniz yoxdur.")
         return
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ Arqument çatışmır. `abi komandalar` yazıb düzgün istifadə formasına bax.")
+        await send_error_card(ctx, "Çatışmayan Arqument", f"`{error.param.name}` parametri daxil edilməyib.\nDüzgün istifadə üçün: `abi komandalar`")
         return
     if isinstance(error, commands.BadArgument):
-        await ctx.send("❌ Daxil etdiyin arqument formatı yanlışdır.")
+        await send_error_card(ctx, "Yanlış Format", "Daxil etdiyiniz parametr və ya istifadəçi formatı yanlışdır.")
         return
 
     logger.exception(f"Komanda xətası: {error}")
-    await ctx.send("⚠️ Gözlənilməz xəta baş verdi.")
+    await send_error_card(ctx, "Xəta Baş Verdi", "Əmr icra edilərkən gözlənilməz xəta yarandı.")
 
 
 @bot.command(name="profil")
@@ -363,10 +387,11 @@ async def profil(ctx, member: discord.Member = None):
     today_seconds = db.get_today(target.id)
     week_seconds = db.get_week(target.id)
     month_seconds = db.get_month(target.id)
-    first_seen = user["first_seen"] if user and user.get("first_seen") else datetime.utcnow().strftime("%Y-%m-%d")
+    first_seen = user["first_seen"] if user and user.get("first_seen") else datetime.utcnow().strftime("%d.%m.%Y")
 
     live_seconds = get_live_seconds(target.id)
-    if live_seconds > 0:
+    is_in_voice = live_seconds > 0
+    if is_in_voice:
         base_total += live_seconds
         today_seconds += live_seconds
         week_seconds += live_seconds
@@ -381,21 +406,29 @@ async def profil(ctx, member: discord.Member = None):
 
     if rank is None:
         db_rank = db.get_rank(target.id)
-        rank = db_rank if db_rank is not None else 0
+        rank = db_rank if db_rank is not None else "—"
 
+    status_str = "🟢 Hal-hazırda səsdədir" if is_in_voice else "⚪ Səsdə deyil"
     avatar_url = target.display_avatar.url if target.display_avatar else discord.Embed.Empty
 
     embed = discord.Embed(
-        title=f"🎙️ {target.display_name} — Səs Profili",
+        title=f"🎙️ Səs Statistikası — {target.display_name}",
         color=0x5865F2,
+        timestamp=datetime.utcnow()
     )
     embed.set_thumbnail(url=avatar_url)
-    embed.add_field(name="⏱️ Ümumi Vaxt", value=format_time(base_total), inline=False)
-    embed.add_field(name="🏆 Sıralama", value=f"#{rank}", inline=True)
-    embed.add_field(name="📅 Bu gün", value=format_time(today_seconds), inline=True)
-    embed.add_field(name="📆 Bu həftə", value=format_time(week_seconds), inline=True)
-    embed.add_field(name="🗓️ Bu ay", value=format_time(month_seconds), inline=True)
-    embed.set_footer(text=f"İlk qeyd: {first_seen}")
+    embed.description = f"**Status:** `{status_str}`\n**Səs Sıralaması:** `🏆 #{rank}`"
+    
+    embed.add_field(
+        name="⏱️ Ümumi Aktivlik",
+        value=f"```fix\n{format_time(base_total)}\n```",
+        inline=False
+    )
+    embed.add_field(name="📅 Bu gün", value=f"⏱️ `{format_time(today_seconds)}`", inline=True)
+    embed.add_field(name="📆 Bu həftə", value=f"⏱️ `{format_time(week_seconds)}`", inline=True)
+    embed.add_field(name="🗓️ Bu ay", value=f"⏱️ `{format_time(month_seconds)}`", inline=True)
+    
+    embed.set_footer(text=f"İlk aktivlik: {first_seen} • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
     await ctx.send(embed=embed)
 
@@ -412,25 +445,30 @@ async def top(ctx, number: int = 10):
     top_rows = leaderboard[:number]
 
     if not top_rows:
-        await ctx.send("📭 Hələ statistik məlumat yoxdur.")
+        embed = discord.Embed(
+            description="📭 Hələ heç bir səs statistikası qeydə alınmayıb.",
+            color=0xFEE75C
+        )
+        await ctx.send(embed=embed)
         return
 
     lines = []
     for index, row in enumerate(top_rows, start=1):
         medal = get_medal(index)
         is_live = row["user_id"] in voice_sessions
-        live_prefix = "🟢 " if is_live else ""
+        live_dot = "🟢 " if is_live else ""
         display_name = row.get("display_name") or row.get("username") or "Naməlum"
         total_seconds = int(row.get("total_seconds") or 0)
 
-        lines.append(f"{medal} {live_prefix}**{display_name}** — {format_time(total_seconds)}")
+        lines.append(f"{medal} {live_dot}**{display_name}** ➔ `{format_time(total_seconds)}`")
 
     embed = discord.Embed(
-        title=f"🏆 Top {number} — Səs Liderləri",
+        title=f"🏆 Səs Liderləri Top {len(top_rows)}",
         description="\n".join(lines),
-        color=0xFFD700,
+        color=0xFEE75C,
+        timestamp=datetime.utcnow()
     )
-    embed.set_footer(text="🟢 = hal-hazırda sesdədir")
+    embed.set_footer(text="🟢 = Hal-hazırda səsdədir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
     await ctx.send(embed=embed)
 
@@ -474,16 +512,11 @@ async def hesabat(ctx, period: str = None):
 async def sifirla(ctx, member: discord.Member):
     # Seçilmiş istifadəçinin statistikasını sıfırlayırıq
     db.reset_user(member.id)
-    await ctx.send(f"✅ {member.display_name} istifadəçisinin statistikası sıfırlandı.")
-
-
-@sifirla.error
-async def sifirla_error(ctx, error):
-    # İcazə olmadıqda məlumat mesajı göndəririk
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bu əmri yalnız administrator istifadə edə bilər.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("❌ İstifadə: `abi sifirla @user`")
+    await send_success_card(
+        ctx,
+        "Statistika Sıfırlandı",
+        f"✅ {member.mention} (`{member.id}`) istifadəçisinin bütün səs aktivliyi və qeydləri sıfırlandı."
+    )
 
 
 @bot.command(name="warn")
@@ -494,15 +527,16 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
     db.upsert_user_identity(ctx.author.id, ctx.author.name, ctx.author.display_name)
     db.add_warning(member.id, ctx.author.id, reason)
     logger.info(f"Warn verildi | mod={ctx.author.id} user={member.id} reason={reason}")
-    await ctx.send(f"⚠️ {member.mention} üçün xəbərdarlıq qeyd edildi. Səbəb: {reason}")
 
     embed = discord.Embed(
-        title="⚠️ Xəbərdarlıq (Warn) Verildi",
-        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+        title="⚠️ Xəbərdarlıq Verildi",
+        description=f"**Cəzalandırılan:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
         color=0xFEE75C,
         timestamp=datetime.utcnow()
     )
     embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    embed.set_footer(text="Xəbərdarlıq qeydə alındı • abi-bot")
+    await ctx.send(embed=embed)
     await send_mod_log(ctx.guild, embed)
 
 
@@ -513,7 +547,14 @@ async def warnings(ctx, member: discord.Member = None):
     rows = db.get_warnings(target.id, limit=10)
 
     if not rows:
-        await ctx.send(f"✅ {target.display_name} üçün xəbərdarlıq qeydi yoxdur.")
+        embed = discord.Embed(
+            title=f"✅ {target.display_name} — Xəbərdarlıqlar",
+            description="Bu istifadəçi üçün heç bir xəbərdarlıq qeydə alınmayıb.",
+            color=0x57F287,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_thumbnail(url=target.display_avatar.url)
+        await ctx.send(embed=embed)
         return
 
     lines = []
@@ -521,13 +562,16 @@ async def warnings(ctx, member: discord.Member = None):
         reason = row.get("reason") or "Səbəb yoxdur"
         mod_id = row.get("moderator_id")
         date = row.get("date") or "-"
-        lines.append(f"`#{row['id']}` • {date} • Mod: <@{mod_id}> • {reason}")
+        lines.append(f"• `#{row['id']}` `[{date}]` — Mod: <@{mod_id}>\n  └ **Səbəb:** {reason}")
 
     embed = discord.Embed(
-        title=f"⚠️ {target.display_name} — Xəbərdarlıqlar",
-        description="\n".join(lines),
+        title=f"⚠️ {target.display_name} — Xəbərdarlıq Tarixçəsi",
+        description="\n\n".join(lines),
         color=0xFAA61A,
+        timestamp=datetime.utcnow()
     )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.set_footer(text=f"Cəmi {len(rows)} xəbərdarlıq göstərilir • abi-bot")
     await ctx.send(embed=embed)
 
 
@@ -537,14 +581,15 @@ async def temizle(ctx, amount: int = 10):
     # Kanaldan mesajları toplu silirik
     amount = max(1, min(amount, 100))
     deleted = await ctx.channel.purge(limit=amount + 1)
-    info = await ctx.send(f"🧹 {len(deleted) - 1} mesaj silindi.")
-
+    
     embed = discord.Embed(
         title="🧹 Mesajlar Təmizləndi",
-        description=f"**Kanal:** {ctx.channel.mention}\n**Moderator:** {ctx.author.mention}\n**Silinən say:** {len(deleted) - 1}",
+        description=f"**Kanal:** {ctx.channel.mention}\n**Silinən Mesaj Sayı:** `{len(deleted) - 1}` ədəd",
         color=0x5865F2,
         timestamp=datetime.utcnow()
     )
+    embed.set_footer(text=f"İcra edən: {ctx.author.display_name}")
+    info = await ctx.send(embed=embed)
     await send_mod_log(ctx.guild, embed)
 
     await asyncio.sleep(4)
@@ -558,38 +603,53 @@ async def temizle(ctx, amount: int = 10):
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = "Səbəb göstərilməyib"):
     # İstifadəçiyə timeout tətbiq edirik
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçiyə timeout verə bilməzsən.")
+        return
+
     minutes = max(1, min(minutes, 40320))
     until = datetime.utcnow() + timedelta(minutes=minutes)
-    await member.timeout(until, reason=f"{ctx.author} | {reason}")
-    logger.info(f"Mute verildi | mod={ctx.author.id} user={member.id} min={minutes} reason={reason}")
-    await ctx.send(f"🔇 {member.mention} {minutes} dəqiqəlik mute edildi. Səbəb: {reason}")
+    try:
+        await member.timeout(until, reason=f"{ctx.author} | {reason}")
+        logger.info(f"Mute verildi | mod={ctx.author.id} user={member.id} min={minutes} reason={reason}")
 
-    embed = discord.Embed(
-        title="🔇 Timeout (Mute) Verildi",
-        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Müddət:** {minutes} dəqiqə\n**Səbəb:** {reason}",
-        color=0xE67E22,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-    await send_mod_log(ctx.guild, embed)
+        embed = discord.Embed(
+            title="🔇 İstifadəçi Mute Edildi (Timeout)",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Müddət:** `{minutes} dəqiqə`\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
+            color=0xE67E22,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        embed.set_footer(text=f"Müddət bitmə vaxtı: {(until).strftime('%H:%M:%S UTC')} • abi-bot")
+        await ctx.send(embed=embed)
+        await send_mod_log(ctx.guild, embed)
+    except discord.Forbidden:
+        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçiyə timeout verməyə səlahiyyəti çatmır (Rol iyerarxiyasını yoxlayın).")
+    except Exception as e:
+        await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
 
 
 @bot.command(name="unmute")
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     # Timeout-u ləğv edirik
-    await member.timeout(None, reason=f"{ctx.author} tərəfindən unmute")
-    logger.info(f"Unmute verildi | mod={ctx.author.id} user={member.id}")
-    await ctx.send(f"🔊 {member.mention} üçün mute ləğv edildi.")
+    try:
+        await member.timeout(None, reason=f"{ctx.author} tərəfindən unmute")
+        logger.info(f"Unmute verildi | mod={ctx.author.id} user={member.id}")
 
-    embed = discord.Embed(
-        title="🔊 Timeout (Mute) Qaldırıldı",
-        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}",
-        color=0x2ECC71,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-    await send_mod_log(ctx.guild, embed)
+        embed = discord.Embed(
+            title="🔊 Timeout Qaldırıldı (Unmute)",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}",
+            color=0x57F287,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await ctx.send(embed=embed)
+        await send_mod_log(ctx.guild, embed)
+    except discord.Forbidden:
+        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçinin səsini/timeout-unu açmağa səlahiyyəti çatmır.")
+    except Exception as e:
+        await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
 
 
 @bot.command(name="kick")
@@ -597,26 +657,26 @@ async def unmute(ctx, member: discord.Member):
 async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
     # Serverdən istifadəçini kənarlaşdırırıq
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-        await ctx.send("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini kick edə bilməzsən.")
+        await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçini serverdən ata bilməzsən.")
         return
 
     try:
         await member.kick(reason=f"{ctx.author} | {reason}")
         logger.info(f"Kick olundu | mod={ctx.author.id} user={member.id} reason={reason}")
-        await ctx.send(f"👢 {member.mention} serverdən kick edildi. Səbəb: {reason}")
 
         embed = discord.Embed(
-            title="👢 Üzv Kick Edildi",
-            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            title="👢 Üzv Serverdən Atıldı (Kick)",
+            description=f"**Atılan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
             color=0xE67E22,
             timestamp=datetime.utcnow()
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await ctx.send(embed=embed)
         await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
-        await ctx.send("❌ Botun bu istifadəçini kick etməyə yetkisi yoxdur (rol iyerarxiyasını yoxlayın).")
+        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini atmağa (kick) icazəsi yoxdur (Rol iyerarxiyasını yoxlayın).")
     except Exception as e:
-        await ctx.send(f"❌ Xəta baş verdi: {e}")
+        await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
 
 
 @bot.command(name="ban")
@@ -624,26 +684,26 @@ async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
 async def ban(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
     # Serverdən istifadəçini ban edirik
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-        await ctx.send("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.")
+        await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.")
         return
 
     try:
         await member.ban(reason=f"{ctx.author} | {reason}", delete_message_days=0)
         logger.info(f"Ban olundu | mod={ctx.author.id} user={member.id} reason={reason}")
-        await ctx.send(f"🔨 {member.mention} serverdən ban edildi. Səbəb: {reason}")
 
         embed = discord.Embed(
             title="🔨 Üzv Ban Edildi",
-            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            description=f"**Banlanan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
             color=0xED4245,
             timestamp=datetime.utcnow()
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await ctx.send(embed=embed)
         await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
-        await ctx.send("❌ Botun bu istifadəçini ban etməyə yetkisi yoxdur (rol iyerarxiyasını yoxlayın).")
+        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini ban etməyə səlahiyyəti çatmır (Rol iyerarxiyasında botun rolu daha aşağıdadır).")
     except Exception as e:
-        await ctx.send(f"❌ Xəta baş verdi: {e}")
+        await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
 
 
 @bot.command(name="unban")
@@ -654,22 +714,23 @@ async def unban(ctx, user_id: int, *, reason: str = "Səbəb göstərilməyib"):
         user = await bot.fetch_user(user_id)
         await ctx.guild.unban(user, reason=f"{ctx.author} | {reason}")
         logger.info(f"Unban olundu | mod={ctx.author.id} user={user_id} reason={reason}")
-        await ctx.send(f"🔓 **{user}** (`{user_id}`) üçün ban qaldırıldı.")
 
         embed = discord.Embed(
             title="🔓 Ban Qaldırıldı",
-            description=f"**İstifadəçi:** {user} (`{user_id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            description=f"**İstifadəçi:** **{user}** (`{user_id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
             color=0x57F287,
             timestamp=datetime.utcnow()
         )
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        await ctx.send(embed=embed)
         await send_mod_log(ctx.guild, embed)
     except discord.NotFound:
-        await ctx.send("❌ Bu ID-də istifadəçi tapılmadı və ya ban siyahısında deyil.")
+        await send_error_card(ctx, "Tapılmadı", "Bu ID-yə uyğun istifadəçi tapılmadı və ya ban siyahısında deyil.")
     except discord.Forbidden:
-        await ctx.send("❌ Botun unban etməyə yetkisi yoxdur.")
+        await send_error_card(ctx, "Yetki Xətası", "Botun ban qaldırmağa (unban) səlahiyyəti çatmır.")
     except Exception as e:
-        await ctx.send(f"❌ Xəta baş verdi: {e}")
+        await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
+
 
 
 @bot.event
@@ -703,18 +764,19 @@ async def on_member_remove(member: discord.Member):
 
 
 def build_progress_bar(current_xp: int, current_level: int) -> str:
-    # Cari level intervalına görə 10 bloklu proqres çubuğu qururuq
+    # Cari level intervalına görə müasir proqres çubuğu qururuq
     level_start = db.xp_for_level(current_level)
     level_end = db.xp_for_level(current_level + 1)
     range_xp = max(level_end - level_start, 1)
     progress_ratio = (current_xp - level_start) / range_xp
     progress_ratio = max(0.0, min(1.0, progress_ratio))
 
-    filled = int(progress_ratio * 10)
-    if filled > 10:
-        filled = 10
-    empty = 10 - filled
-    return "█" * filled + "░" * empty
+    total_blocks = 12
+    filled = int(progress_ratio * total_blocks)
+    filled = max(0, min(total_blocks, filled))
+    empty = total_blocks - filled
+    percent = int(progress_ratio * 100)
+    return f"`[{'■' * filled}{'□' * empty}]` **{percent}%**"
 
 
 @bot.command(name="seviyye")
@@ -726,17 +788,26 @@ async def seviyye(ctx, member: discord.Member = None):
     current_level = int(user.get("level") or 1) if user else 1
     current_xp = int(user.get("xp") or 0) if user else 0
     next_level_xp = db.xp_for_level(current_level + 1)
+    level_start_xp = db.xp_for_level(current_level)
     needed_xp = max(next_level_xp - current_xp, 0)
 
     progress_bar = build_progress_bar(current_xp, current_level)
 
     embed = discord.Embed(
-        title=f"⭐ {target.display_name} — Səviyyə Profili",
+        title=f"⭐ Səviyyə Profili — {target.display_name}",
         color=0x9B59B6,
+        timestamp=datetime.utcnow()
     )
-    embed.add_field(name="🏅 Səviyyə", value=str(current_level), inline=False)
-    embed.add_field(name="✨ XP", value=f"{current_xp} / {next_level_xp} (qalıb: {needed_xp})", inline=False)
-    embed.add_field(name="📊 Proqres", value=progress_bar, inline=False)
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Cari Səviyyə:** `🏅 Səviyyə {current_level}`"
+
+    embed.add_field(
+        name="✨ Təcrübə (XP)",
+        value=f"```yaml\nCari XP: {current_xp} / {next_level_xp}\nNövbəti səviyyəyə: {needed_xp} XP qaldı\n```",
+        inline=False
+    )
+    embed.add_field(name="📈 Səviyyə İrəliləyişi", value=progress_bar, inline=False)
+    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP verilir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
     await ctx.send(embed=embed)
 
@@ -751,7 +822,11 @@ async def xptop(ctx, number: int = 10):
 
     rows = db.get_level_leaderboard(number)
     if not rows:
-        await ctx.send("📭 Hələ XP statistikası yoxdur.")
+        embed = discord.Embed(
+            description="📭 Hələ heç bir XP qeydi mövcud deyil.",
+            color=0x9B59B6
+        )
+        await ctx.send(embed=embed)
         return
 
     lines = []
@@ -760,13 +835,15 @@ async def xptop(ctx, number: int = 10):
         display_name = row.get("display_name") or row.get("username") or "Naməlum"
         level = int(row.get("level") or 1)
         xp = int(row.get("xp") or 0)
-        lines.append(f"{medal} **{display_name}** — Səviyyə {level} ({xp} XP)")
+        lines.append(f"{medal} **{display_name}** ➔ `Lv.{level}` • `{xp:,} XP`")
 
     embed = discord.Embed(
-        title="⭐ XP Liderləri",
+        title=f"⭐ XP & Səviyyə Liderləri Top {len(rows)}",
         description="\n".join(lines),
         color=0x9B59B6,
+        timestamp=datetime.utcnow()
     )
+    embed.set_footer(text="Səsdə qalaraq səviyyənizi artırın • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
     await ctx.send(embed=embed)
 
@@ -775,15 +852,26 @@ async def xptop(ctx, number: int = 10):
 async def userinfo(ctx, member: discord.Member = None):
     # İstifadəçi haqqında əsas məlumatları göstəririk
     target = member or ctx.author
-    created = target.created_at.strftime("%Y-%m-%d %H:%M UTC") if target.created_at else "-"
-    joined = target.joined_at.strftime("%Y-%m-%d %H:%M UTC") if target.joined_at else "-"
+    created = target.created_at.strftime("%d.%m.%Y • %H:%M UTC") if target.created_at else "-"
+    joined = target.joined_at.strftime("%d.%m.%Y • %H:%M UTC") if target.joined_at else "-"
+    roles = [r.mention for r in target.roles if r.name != "@everyone"]
+    roles_str = ", ".join(roles[:8]) if roles else "Rol yoxdur"
+    if len(roles) > 8:
+        roles_str += f" (+{len(roles)-8} rol)"
 
-    embed = discord.Embed(title=f"👤 {target}", color=0x3498DB)
+    embed = discord.Embed(
+        title=f"👤 İstifadəçi Məlumatı — {target.display_name}",
+        color=0x3498DB,
+        timestamp=datetime.utcnow()
+    )
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="ID", value=str(target.id), inline=False)
-    embed.add_field(name="Hesab yaradılıb", value=created, inline=True)
-    embed.add_field(name="Serverə qoşulub", value=joined, inline=True)
-    embed.add_field(name="Ən yüksək rol", value=target.top_role.mention, inline=False)
+    embed.add_field(name="🏷️ Tag", value=f"`{target}`", inline=True)
+    embed.add_field(name="🆔 ID", value=f"`{target.id}`", inline=True)
+    embed.add_field(name="👑 Ən Yüksək Rol", value=target.top_role.mention, inline=True)
+    embed.add_field(name="📅 Qeydiyyat Tarixi", value=f"`{created}`", inline=True)
+    embed.add_field(name="📥 Serverə Qoşuldu", value=f"`{joined}`", inline=True)
+    embed.add_field(name="🎭 Bütün Rollar", value=roles_str, inline=False)
+    embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name} • abi-bot", icon_url=ctx.author.display_avatar.url)
     await ctx.send(embed=embed)
 
 
@@ -797,15 +885,28 @@ async def serverinfo(ctx):
 
     text_count = len(guild.text_channels)
     voice_count = len(guild.voice_channels)
+    category_count = len(guild.categories)
     member_count = guild.member_count or 0
+    created = guild.created_at.strftime("%d.%m.%Y • %H:%M UTC") if guild.created_at else "-"
+    owner = guild.owner.mention if guild.owner else "Naməlum"
 
-    embed = discord.Embed(title=f"🏠 {guild.name}", color=0x2ECC71)
+    embed = discord.Embed(
+        title=f"🏠 Server Məlumatı — {guild.name}",
+        color=0x2ECC71,
+        timestamp=datetime.utcnow()
+    )
     if guild.icon:
         embed.set_thumbnail(url=guild.icon.url)
-    embed.add_field(name="ID", value=str(guild.id), inline=False)
-    embed.add_field(name="Üzvlər", value=str(member_count), inline=True)
-    embed.add_field(name="Mətn kanalları", value=str(text_count), inline=True)
-    embed.add_field(name="Səs kanalları", value=str(voice_count), inline=True)
+    
+    embed.add_field(name="👑 Server Sahibi", value=owner, inline=True)
+    embed.add_field(name="🆔 Server ID", value=f"`{guild.id}`", inline=True)
+    embed.add_field(name="👥 Ümumi Üzvlər", value=f"`{member_count:,}` üzv", inline=True)
+    embed.add_field(name="💬 Mətn Kanalları", value=f"`{text_count}` kanal", inline=True)
+    embed.add_field(name="🎙️ Səs Kanalları", value=f"`{voice_count}` kanal", inline=True)
+    embed.add_field(name="📁 Kateqoriyalar", value=f"`{category_count}` kateqoriya", inline=True)
+    embed.add_field(name="📅 Yaranma Tarixi", value=f"`{created}`", inline=False)
+    
+    embed.set_footer(text=f"Server: {guild.name} • abi-bot", icon_url=guild.icon.url if guild.icon else None)
     await ctx.send(embed=embed)
 
 
@@ -813,8 +914,13 @@ async def serverinfo(ctx):
 async def avatar(ctx, member: discord.Member = None):
     # İstifadəçi avatarını böyüdülmüş göstəririk
     target = member or ctx.author
-    embed = discord.Embed(title=f"🖼️ {target.display_name} avatarı", color=0x5865F2)
+    embed = discord.Embed(
+        title=f"🖼️ {target.display_name} — Avatar",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
     embed.set_image(url=target.display_avatar.url)
+    embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
     await ctx.send(embed=embed)
 
 
@@ -831,9 +937,14 @@ async def poll(ctx, *, text: str):
     options = parts[1:11]
     emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
 
-    lines = [f"{emojis[i]} {option}" for i, option in enumerate(options)]
-    embed = discord.Embed(title=f"📊 {question}", description="\n".join(lines), color=0xF1C40F)
-    embed.set_footer(text=f"Sorğunu başladan: {ctx.author.display_name}")
+    lines = [f"{emojis[i]} **{option}**" for i, option in enumerate(options)]
+    embed = discord.Embed(
+        title=f"📊 Sorğu: {question}",
+        description="\n\n".join(lines),
+        color=0xF1C40F,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Sorğunu başlatdı: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
 
     msg = await ctx.send(embed=embed)
     for i in range(len(options)):
@@ -842,30 +953,63 @@ async def poll(ctx, *, text: str):
 
 @bot.command(name="komandalar")
 async def komandalar(ctx):
-    # Bütün əmrləri kömək bölməsində göstəririk
+    # Bütün əmrləri kateqoriyalarla gözəl menyuda göstəririk
     embed = discord.Embed(
-        title="📚 Komandalar",
-        description="Bot əmrlərinin siyahısı:",
+        title="🤖 abi-bot — Komanda Bələdçisi",
+        description="Botun bütün əmrləri aşağıdakı kateqoriyalara bölünüb.\nƏmrlərin önünə **`abi `** prefix-ini yazın.",
         color=0x5865F2,
+        timestamp=datetime.utcnow()
     )
-    embed.add_field(name="abi profil [@user]", value="Səs statistikası.", inline=False)
-    embed.add_field(name="abi top [number]", value="Səs liderləri.", inline=False)
-    embed.add_field(name="abi hesabat [gun/hefte/ay]", value="Period liderləri.", inline=False)
-    embed.add_field(name="abi seviyye [@user]", value="Level və XP.", inline=False)
-    embed.add_field(name="abi xptop [number]", value="XP liderləri.", inline=False)
-    embed.add_field(name="abi warn @user [səbəb]", value="(Mod) Xəbərdarlıq verir.", inline=False)
-    embed.add_field(name="abi warnings [@user]", value="Xəbərdarlıqları göstərir.", inline=False)
-    embed.add_field(name="abi temizle [say]", value="(Mod) Mesajları silir.", inline=False)
-    embed.add_field(name="abi mute @user [dəq] [səbəb]", value="(Mod) Timeout verir.", inline=False)
-    embed.add_field(name="abi unmute @user", value="(Mod) Timeout-u açır.", inline=False)
-    embed.add_field(name="abi kick @user [səbəb]", value="(Mod) Serverdən atır.", inline=False)
-    embed.add_field(name="abi ban @user [səbəb]", value="(Mod) Serverdən ban edir.", inline=False)
-    embed.add_field(name="abi unban [userID] [səbəb]", value="(Mod) Banı açır.", inline=False)
-    embed.add_field(name="abi userinfo [@user]", value="İstifadəçi məlumatı.", inline=False)
-    embed.add_field(name="abi serverinfo", value="Server məlumatı.", inline=False)
-    embed.add_field(name="abi avatar [@user]", value="Avatarı göstərir.", inline=False)
-    embed.add_field(name="abi poll sual|v1|v2...", value="(Mod) Sorğu yaradır.", inline=False)
-    embed.add_field(name="abi sifirla @user", value="(Admin) Səs statistikasını sıfırlayır.", inline=False)
+    if bot.user:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+
+    embed.add_field(
+        name="🎙️ Səs & Aktivlik Statistikası",
+        value=(
+            "• `abi profil [@user]` — Səs aktivliyi və sıralama profili\n"
+            "• `abi top [say]` — Ən çox səsdə qalanların ümumi lider cədvəli\n"
+            "• `abi hesabat [gun/hefte/ay]` — Periodik səs hesabatı"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="⭐ Səviyyə & XP Sistemi",
+        value=(
+            "• `abi seviyye [@user]` — Level, XP kartı və tərəqqi çubuğu\n"
+            "• `abi xptop [say]` — Ən yüksək səviyyəli üzvlər"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🛡️ Moderasiya & Təhlükəsizlik",
+        value=(
+            "• `abi warn @user [səbəb]` — İstifadəçiyə xəbərdarlıq qeyd edir\n"
+            "• `abi warnings [@user]` — Xəbərdarlıq tarixçəsini göstərir\n"
+            "• `abi mute @user [dəq] [səbəb]` — Timeout (səs/yazı kəsmə)\n"
+            "• `abi unmute @user` — Timeout-u vaxtından əvvəl qaldırır\n"
+            "• `abi kick @user [səbəb]` — İstifadəçini serverdən atır\n"
+            "• `abi ban @user [səbəb]` — İstifadəçini serverdən qadağan edir\n"
+            "• `abi unban [ID] [səbəb]` — İstifadəçinin banını açır\n"
+            "• `abi temizle [say]` — Kanaldakı mesajları toplu silir"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🧰 Köməkçi & Digər Əmrlər",
+        value=(
+            "• `abi userinfo [@user]` — İstifadəçi haqqında detallı məlumat\n"
+            "• `abi serverinfo` — Serverin ümumi statistikası\n"
+            "• `abi avatar [@user]` — Böyüdülmüş profil şəkli\n"
+            "• `abi poll Sual | V1 | V2` — İnteraktiv səsvermə sorğusu\n"
+            "• `abi sifirla @user` — *(Admin)* Səs statistikasını sıfırlayır"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Developed for your server • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
     await ctx.send(embed=embed)
 
