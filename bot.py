@@ -18,12 +18,11 @@ load_dotenv()
 
 PREFIX = "abi "
 TOKEN = os.getenv("TOKEN")
-REPORT_CHANNEL_ID = int(os.getenv("REPORT_CHANNEL_ID", 0))
+GUILD_ID = int(os.getenv("GUILD_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
 MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", 0))
 
 # Moderasiya və anti-spam ayarları
-ANTI_LINK_ENABLED = True
 ANTI_SPAM_ENABLED = True
 SPAM_WINDOW_SECONDS = 8
 SPAM_MESSAGE_THRESHOLD = 5
@@ -37,7 +36,6 @@ LEVEL_ROLE_REWARDS = {
 
 XP_AWARD_COOLDOWN_SECONDS = 600
 XP_MIN_MEMBERS_IN_VOICE = 2
-LINK_REGEX = re.compile(r"(https?://\S+|www\.\S+|discord\.gg/\S+)", re.IGNORECASE)
 
 
 intents = discord.Intents.default()
@@ -100,11 +98,6 @@ def is_exempt_member(member: discord.Member) -> bool:
     return False
 
 
-def is_link_message(content: str) -> bool:
-    # Mesajda link olub-olmadığını yoxlayırıq
-    return bool(LINK_REGEX.search(content or ""))
-
-
 async def send_error_card(ctx, title: str, description: str):
     # Gözəl qırmızı/narıncı xəta kartı
     embed = discord.Embed(
@@ -127,6 +120,38 @@ async def send_success_card(ctx, title: str, description: str, color: int = 0x57
     )
     embed.set_footer(text=f"İcra edən: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
     await ctx.send(embed=embed)
+
+
+COMMAND_GUIDANCE = {
+    "warn": ("`abi warn @istifadəçi [səbəb]`", "`abi warn @Nihad Spam paylaşdı`"),
+    "warnings": ("`abi warnings [@istifadəçi]`", "`abi warnings @Nihad`"),
+    "delwarn": ("`abi delwarn [warn ID]`", "`abi delwarn 12`"),
+    "clearwarn": ("`abi clearwarn @istifadəçi`", "`abi clearwarn @Nihad`"),
+    "temizle": ("`abi temizle [say]`", "`abi temizle 25`"),
+    "mute": ("`abi mute @istifadəçi [dəqiqə] [səbəb]`", "`abi mute @Nihad 30 Təhqir`"),
+    "unmute": ("`abi unmute @istifadəçi`", "`abi unmute @Nihad`"),
+    "kick": ("`abi kick @istifadəçi [səbəb]`", "`abi kick @Nihad Qaydaları pozdu`"),
+    "ban": ("`abi ban @istifadəçi [səbəb]`", "`abi ban @Nihad Təkrar qayda pozuntusu`"),
+    "unban": ("`abi unban [istifadəçi ID] [səbəb]`", "`abi unban 123456789012345678 Səhv ban`"),
+    "sifirla": ("`abi sifirla @istifadəçi`", "`abi sifirla @Nihad`"),
+    "setlog": ("`abi setlog #kanal`", "`abi setlog #mod-log`"),
+    "adminkomandalar": ("`abi adminkomandalar [əmr]`", "`abi adminkomandalar warn`"),
+    "poll": ("`abi poll Sual | Variant 1 | Variant 2`", "`abi poll Hansı oyun? | CS2 | Valorant`"),
+    "hesabat": ("`abi hesabat [gun/hefte/ay]`", "`abi hesabat hefte`"),
+}
+
+
+def get_command_guidance(command_name: str):
+    return COMMAND_GUIDANCE.get(command_name, (f"`abi {command_name}`", "`abi komandalar`"))
+
+
+PERMISSION_LABELS = {
+    "administrator": "Administrator",
+    "manage_messages": "Mesajları idarə et",
+    "moderate_members": "Üzvləri moderasiya et",
+    "kick_members": "Üzvləri at",
+    "ban_members": "Üzvləri ban et",
+}
 
 
 def format_time(seconds: int) -> str:
@@ -223,15 +248,18 @@ async def on_ready():
         status=discord.Status.online
     )
 
-    if not daily_report.is_running():
-        daily_report.start()
-
     if not xp_task.is_running():
         xp_task.start()
 
     try:
-        synced = await bot.tree.sync()
-        logger.info(f"{len(synced)} Slash komandası Discord ilə sinxronlaşdırıldı.")
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            logger.info(f"{len(synced)} Slash komandası {GUILD_ID} serveri üçün sinxronlaşdırıldı.")
+        else:
+            synced = await bot.tree.sync()
+            logger.info(f"{len(synced)} Slash komandası Discord ilə qlobal sinxronlaşdırıldı.")
     except Exception as e:
         logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
 
@@ -326,22 +354,10 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # DM-də anti-spam/link tətbiq etmirik, amma command/AI işləsin
+    # DM-də anti-spam tətbiq etmirik, amma command/AI işləsin
     if message.guild and isinstance(message.author, discord.Member):
         try:
             exempt = is_exempt_member(message.author)
-
-            if ANTI_LINK_ENABLED and not exempt and is_link_message(message.content):
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.channel.send(
-                    f"⚠️ {message.author.mention}, link paylaşmaq bu kanalda qadağandır.",
-                    delete_after=6,
-                )
-                logger.info(f"Anti-link işlədi | user={message.author.id} guild={message.guild.id}")
-                return
 
             if ANTI_SPAM_ENABLED and not exempt:
                 now = datetime.utcnow()
@@ -399,6 +415,10 @@ async def on_message(message: discord.Message):
         await message.reply(f"Salam aleykum, {message.author.mention}! Xoş gördük 👋")
         return
 
+    if norm_text == "abi zibzib":
+        await message.reply("https://www.youtube.com/watch?v=DBhs676nka4")
+        return
+
     if norm_text in ["abi ne var ne yox", "abi nə var nə yox", "abi nava nox"]:
         await message.reply("Hər şey qaydasındadır, səs kanallarına nəzarət edirəm! Səndə nə xəbər? 🎧")
         return
@@ -433,13 +453,42 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         return
     if isinstance(error, commands.MissingPermissions):
-        await send_error_card(ctx, "İcazə Çatışmır", "Bu əmri istifadə etmək üçün tələb olunan yetkiniz yoxdur.")
+        required = ", ".join(
+            PERMISSION_LABELS.get(permission, permission.replace("_", " ").title())
+            for permission in error.missing_permissions
+        )
+        await send_error_card(
+            ctx,
+            "İcazə çatışmır",
+            f"Bu əmri istifadə etmək üçün bu icazə lazımdır: **{required}**.",
+        )
         return
     if isinstance(error, commands.MissingRequiredArgument):
-        await send_error_card(ctx, "Çatışmayan Arqument", f"`{error.param.name}` parametri daxil edilməyib.\nDüzgün istifadə üçün: `abi komandalar`")
+        command_name = ctx.command.qualified_name if ctx.command else "komanda"
+        usage, example = get_command_guidance(command_name)
+        await send_error_card(
+            ctx,
+            f"{command_name.title()} üçün məlumat çatışmır",
+            (
+                f"**`{error.param.name}`** hissəsini yazmamısınız.\n\n"
+                f"**Düzgün istifadə:** {usage}\n"
+                f"**Nümunə:** {example}\n\n"
+                "Ətraflı siyahı üçün: `abi komandalar`"
+            ),
+        )
         return
     if isinstance(error, commands.BadArgument):
-        await send_error_card(ctx, "Yanlış Format", "Daxil etdiyiniz parametr və ya istifadəçi formatı yanlışdır.")
+        command_name = ctx.command.qualified_name if ctx.command else "komanda"
+        usage, example = get_command_guidance(command_name)
+        await send_error_card(
+            ctx,
+            "Yanlış format",
+            (
+                "İstifadəçi, kanal, ID və ya rəqəm formatı düzgün deyil.\n\n"
+                f"**Düzgün istifadə:** {usage}\n"
+                f"**Nümunə:** {example}"
+            ),
+        )
         return
 
     logger.exception(f"Komanda xətası: {error}")
@@ -1128,8 +1177,159 @@ async def komandalar(ctx):
         inline=False
     )
 
+    embed.add_field(
+        name="🔐 Administrator bələdçisi",
+        value="• `abi adminkomandalar [əmr]` — Moderasiya əmrlərinin istifadə qaydası və nümunələri",
+        inline=False
+    )
+
     embed.set_footer(text="Developed for your server • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
 
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="adminkomandalar", aliases=["adminhelp"])
+@commands.has_permissions(administrator=True)
+async def adminkomandalar(ctx, command_name: str = None):
+    """Administratorlar üçün moderasiya əmrlərinin izahlı bələdçisi."""
+    guides = {
+        "warn": {
+            "title": "⚠️ Warn sistemi",
+            "text": (
+                "**İstifadə:** `abi warn @istifadəçi [səbəb]`\n"
+                "**İcazə:** Mesajları idarə et (Manage Messages)\n\n"
+                "İstifadəçiyə xəbərdarlıq verir, səbəbi bazada saxlayır və mod-log kanalına göndərir.\n"
+                "• 3 warn → avtomatik 1 saat timeout\n"
+                "• 5 və daha çox warn → avtomatik 24 saat timeout\n\n"
+                "**Nümunə:** `abi warn @Nihad Spam paylaşdı`"
+            ),
+        },
+        "warnings": {
+            "title": "📋 Warn tarixçəsi",
+            "text": (
+                "**İstifadə:** `abi warnings [@istifadəçi]`\n"
+                "Öz warn-larını və ya göstərilən istifadəçinin warn tarixçəsini göstərir.\n\n"
+                "**Nümunə:** `abi warnings @Nihad`"
+            ),
+        },
+        "delwarn": {
+            "title": "🗑️ Tək warn silmək",
+            "text": (
+                "**İstifadə:** `abi delwarn [warn ID]`\n"
+                "**İcazə:** Mesajları idarə et\n\n"
+                "`abi warnings` nəticəsində görünən ID ilə bir xəbərdarlığı silir.\n\n"
+                "**Nümunə:** `abi delwarn 12`"
+            ),
+        },
+        "clearwarn": {
+            "title": "🧹 Bütün warn-ları silmək",
+            "text": (
+                "**İstifadə:** `abi clearwarn @istifadəçi`\n"
+                "**İcazə:** Mesajları idarə et\n\n"
+                "Seçilmiş istifadəçinin bütün xəbərdarlıqlarını silir. Bu əməl geri qaytarılmır."
+            ),
+        },
+        "mute": {
+            "title": "🔇 Timeout (Mute)",
+            "text": (
+                "**İstifadə:** `abi mute @istifadəçi [dəqiqə] [səbəb]`\n"
+                "**İcazə:** Üzvləri moderasiya et (Moderate Members)\n\n"
+                "İstifadəçiyə seçilən müddət üçün Discord timeout tətbiq edir.\n\n"
+                "**Nümunə:** `abi mute @Nihad 30 Təhqir`"
+            ),
+        },
+        "unmute": {
+            "title": "🔊 Timeout-u açmaq",
+            "text": (
+                "**İstifadə:** `abi unmute @istifadəçi`\n"
+                "**İcazə:** Üzvləri moderasiya et\n\n"
+                "İstifadəçinin aktiv timeout cəzasını dərhal ləğv edir."
+            ),
+        },
+        "kick": {
+            "title": "👢 Kick",
+            "text": (
+                "**İstifadə:** `abi kick @istifadəçi [səbəb]`\n"
+                "**İcazə:** Üzvləri at (Kick Members)\n\n"
+                "İstifadəçini serverdən çıxarır; sonradan yenidən qoşula bilər."
+            ),
+        },
+        "ban": {
+            "title": "🔨 Ban",
+            "text": (
+                "**İstifadə:** `abi ban @istifadəçi [səbəb]`\n"
+                "**İcazə:** Üzvləri ban et (Ban Members)\n\n"
+                "İstifadəçini serverdən qadağan edir. Banı açmaq üçün `abi unban` istifadə edin."
+            ),
+        },
+        "unban": {
+            "title": "✅ Banı açmaq",
+            "text": (
+                "**İstifadə:** `abi unban [istifadəçi ID] [səbəb]`\n"
+                "**İcazə:** Üzvləri ban et\n\n"
+                "İstifadəçinin banını Discord ID-si ilə açır. Mention yox, yalnız rəqəm ID yazılmalıdır.\n\n"
+                "**Nümunə:** `abi unban 123456789012345678 Səhv ban`"
+            ),
+        },
+        "temizle": {
+            "title": "🧽 Mesajları təmizləmək",
+            "text": (
+                "**İstifadə:** `abi temizle [say]`\n"
+                "**İcazə:** Mesajları idarə et\n\n"
+                "Cari kanaldan 1–100 arası mesajı silir. Əmr mesajı da silinənlərə daxildir.\n\n"
+                "**Nümunə:** `abi temizle 25`"
+            ),
+        },
+        "setlog": {
+            "title": "📜 Mod-log kanalını təyin etmək",
+            "text": (
+                "**İstifadə:** `abi setlog #kanal`\n"
+                "**İcazə:** Administrator\n\n"
+                "Warn, kick, ban, silinən/redaktə edilən mesajlar və səs giriş-çıxış loglarını seçilən kanala göndərir.\n\n"
+                "**Nümunə:** `abi setlog #mod-log`"
+            ),
+        },
+        "sifirla": {
+            "title": "♻️ Səs statistikasını sıfırlamaq",
+            "text": (
+                "**İstifadə:** `abi sifirla @istifadəçi`\n"
+                "**İcazə:** Administrator\n\n"
+                "İstifadəçinin səs vaxtı və bağlı statistik qeydlərini silir. Bu əməl geri qaytarılmır."
+            ),
+        },
+    }
+
+    if not command_name:
+        available = ", ".join(f"`{name}`" for name in guides)
+        embed = discord.Embed(
+            title="🔐 Administrator Komanda Bələdçisi",
+            description=(
+                f"Ətraflı izah üçün `abi adminkomandalar [əmr]` yazın.\n\n"
+                f"**Mövcud əmrlər:**\n{available}"
+            ),
+            color=0x5865F2,
+            timestamp=datetime.utcnow(),
+        )
+        embed.set_footer(text="Nümunə: abi adminkomandalar warn • abi-bot")
+        await ctx.send(embed=embed)
+        return
+
+    guide = guides.get(command_name.lower())
+    if not guide:
+        await send_error_card(
+            ctx,
+            "Əmr Tapılmadı",
+            "Bu admin əmri üçün bələdçi yoxdur. Siyahı üçün `abi adminkomandalar` yazın.",
+        )
+        return
+
+    embed = discord.Embed(
+        title=guide["title"],
+        description=guide["text"],
+        color=0x5865F2,
+        timestamp=datetime.utcnow(),
+    )
+    embed.set_footer(text=f"Sorğunu açan: {ctx.author.display_name} • abi-bot")
     await ctx.send(embed=embed)
 
 
@@ -1583,8 +1783,7 @@ async def slash_setlog(interaction: discord.Interaction, channel: discord.TextCh
 )
 @app_commands.choices(type=[
     app_commands.Choice(name="📜 Mod & Audit Log Kanalı", value="mod_log_channel"),
-    app_commands.Choice(name="🎉 Səviyyə (Level-Up) Bildiriş Kanalı", value="levelup_channel"),
-    app_commands.Choice(name="🌙 Günlük Səs Hesabatı Kanalı", value="report_channel")
+    app_commands.Choice(name="🎉 Səviyyə (Level-Up) Bildiriş Kanalı", value="levelup_channel")
 ])
 async def slash_setchannel(interaction: discord.Interaction, type: app_commands.Choice[str], channel: discord.TextChannel):
     if not interaction.guild:
@@ -1670,6 +1869,15 @@ async def xp_task():
         if not member.voice or not member.voice.channel:
             continue
 
+        # Aktiv sessiyanı periodik olaraq bazaya yazırıq. Bot yenidən başlasa,
+        # ən çox bu interval qədər səs vaxtı itə bilər.
+        started_at = voice_sessions.get(user_id)
+        if started_at:
+            elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
+            if elapsed_seconds > 0:
+                db.add_voice_time(member.id, member.name, member.display_name, elapsed_seconds)
+                voice_sessions[user_id] = datetime.utcnow()
+
         # Anti-farm: kanalda minimum real istifadəçi sayı olmalıdır
         human_members = [m for m in member.voice.channel.members if not m.bot]
         if len(human_members) < XP_MIN_MEMBERS_IN_VOICE:
@@ -1720,61 +1928,6 @@ async def xp_task():
 @xp_task.before_loop
 async def before_xp_task():
     # XP döngüsü başlamadan öncə botun tam hazır olmasını gözləyirik
-    await bot.wait_until_ready()
-
-
-@tasks.loop(hours=24)
-async def daily_report():
-    # Hər 24 saatdan bir hər serverə öz günlük hesabatını göndəririk
-    for guild in bot.guilds:
-        rep_chan_id = db.get_guild_setting(guild.id, "report_channel") or REPORT_CHANNEL_ID
-        if not rep_chan_id:
-            continue
-
-        try:
-            channel = guild.get_channel(int(rep_chan_id))
-            if channel is None:
-                continue
-
-            rows = db.get_period_leaderboard("gun", 10)
-            if not rows:
-                description = "📭 Bu gün üçün statistik məlumat yoxdur."
-            else:
-                lines = []
-                for index, row in enumerate(rows, start=1):
-                    medal = get_medal(index)
-                    display_name = row.get("display_name") or row.get("username") or "Naməlum"
-                    total_seconds = int(row.get("total_seconds") or 0)
-                    lines.append(f"{medal} **{display_name}** — {format_time(total_seconds)}")
-                description = "\n".join(lines)
-
-            today_footer = datetime.utcnow().strftime("%d.%m.%Y")
-            embed = discord.Embed(
-                title="🌙 Günlük Avtomatik Hesabat",
-                description=description,
-                color=0xEB459E,
-            )
-            embed.set_footer(text=today_footer)
-            await channel.send(embed=embed)
-        except Exception as e:
-            logger.warning(f"Günlük hesabat göndərilmədi ({guild.id}): {e}")
-
-
-    today_footer = datetime.utcnow().strftime("%d.%m.%Y")
-
-    embed = discord.Embed(
-        title="🌙 Günlük Avtomatik Hesabat",
-        description=description,
-        color=0xEB459E,
-    )
-    embed.set_footer(text=today_footer)
-
-    await channel.send(embed=embed)
-
-
-@daily_report.before_loop
-async def before_daily_report():
-    # Döngü başlamadan öncə botun tam hazır olmasını gözləyirik
     await bot.wait_until_ready()
 
 

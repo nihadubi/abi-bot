@@ -5,7 +5,7 @@ A feature-rich Discord bot built with `discord.py` for voice activity tracking, 
 ## ✨ Features
 
 - 🎙️ Voice activity tracking (total/daily/weekly/monthly)
-- 📊 Leaderboards and periodic reports
+- 📊 Leaderboards
 - ⭐ XP + level system for voice participation
 - 🛡️ Moderation commands (`warn`, `warnings`, `temizle`, `mute`, `unmute`, `kick`, `ban`, `unban`)
 - 📜 Audit & Mod Log system (message delete/edit, voice events, moderation actions, member join/leave)
@@ -44,7 +44,7 @@ Create a `.env` file in the project root:
 
 ```env
 TOKEN=your_discord_bot_token
-REPORT_CHANNEL_ID=123456789012345678
+GUILD_ID=123456789012345678
 LEVEL_UP_CHANNEL_ID=123456789012345678
 MOD_LOG_CHANNEL_ID=123456789012345678
 ```
