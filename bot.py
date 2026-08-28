@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
 import discord
-import httpx
+from aiohttp import web
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -17,9 +17,9 @@ load_dotenv()
 
 PREFIX = "abi "
 TOKEN = os.getenv("TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 REPORT_CHANNEL_ID = int(os.getenv("REPORT_CHANNEL_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
+MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", 0))
 
 # Moderasiya və anti-spam ayarları
 ANTI_LINK_ENABLED = True
@@ -59,6 +59,18 @@ spam_tracker = defaultdict(deque)
 
 # XP anti-farm üçün son mükafat vaxtını saxlayırıq
 last_xp_award = {}
+
+
+async def send_mod_log(guild: discord.Guild, embed: discord.Embed):
+    # Log kanalına embed göndəririk (MOD_LOG_CHANNEL_ID təyin olunubsa)
+    if not guild or not MOD_LOG_CHANNEL_ID:
+        return
+    channel = guild.get_channel(MOD_LOG_CHANNEL_ID)
+    if channel:
+        try:
+            await channel.send(embed=embed)
+        except Exception as e:
+            logger.warning(f"Mod log göndərilə bilmədi: {e}")
 
 
 def is_exempt_member(member: discord.Member) -> bool:
@@ -150,30 +162,6 @@ def get_combined_totals():
     return sorted(combined.values(), key=lambda x: x["total_seconds"], reverse=True)
 
 
-async def ask_ai(prompt: str) -> str:
-    # Groq API ilə AI cavabını alırıq
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": "Sən abi adlı Discord botsan. Azərbaycan dilində danış, qısa cavab ver, casual ol, bəzən zarafat elə. Özünü təqdim etmə, izah vermə, sadəcə normal danış."},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 500
-            },
-            timeout=30
-        )
-        data = response.json()
-        print("Groq cavabı:", data)
-        return data["choices"][0]["message"]["content"]
-
-
 @bot.event
 async def on_ready():
     # Bot açıldıqda hazırda səsdə olanları aktiv sessiyaya əlavə edirik
@@ -212,21 +200,77 @@ async def on_voice_state_update(member, before, after):
     # Səsə qoşulma halında sessiyanı başladırıq
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = datetime.utcnow()
+        embed = discord.Embed(
+            description=f"🎙️ {member.mention} **{after.channel.name}** səs kanalına qoşuldu.",
+            color=0x2ECC71,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await send_mod_log(member.guild, embed)
         return
 
     # Səsdən çıxma halında sessiyanı yadda saxlayırıq
     if before.channel is not None and after.channel is None:
         started_at = voice_sessions.get(member.id)
+        seconds = 0
         if started_at:
             seconds = int((datetime.utcnow() - started_at).total_seconds())
             if seconds > 0:
                 db.add_voice_time(member.id, member.name, member.display_name, seconds)
             voice_sessions.pop(member.id, None)
+
+        embed = discord.Embed(
+            description=f"🚪 {member.mention} **{before.channel.name}** səs kanalından ayrıldı." + (f" (Müddət: {format_time(seconds)})" if seconds > 0 else ""),
+            color=0xE74C3C,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await send_mod_log(member.guild, embed)
         return
 
-    # Kanal dəyişməsində heç nə etmirik, sessiya davam edir
-    if before.channel is not None and after.channel is not None:
+    # Kanal dəyişməsi
+    if before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+        embed = discord.Embed(
+            description=f"🔄 {member.mention} kanal dəyişdi: **{before.channel.name}** ➔ **{after.channel.name}**",
+            color=0x3498DB,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await send_mod_log(member.guild, embed)
         return
+
+
+@bot.event
+async def on_message_delete(message: discord.Message):
+    if message.author.bot or not message.guild:
+        return
+
+    embed = discord.Embed(
+        title="🗑️ Mesaj Silindi",
+        description=f"**Müəllif:** {message.author.mention} (`{message.author.id}`)\n**Kanal:** {message.channel.mention}\n**Məzmun:**\n{message.content or '*[Mətn yoxdur / Fayl və ya Embed]*'}",
+        color=0xE74C3C,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(message.author), icon_url=message.author.display_avatar.url)
+    await send_mod_log(message.guild, embed)
+
+
+@bot.event
+async def on_message_edit(before: discord.Message, after: discord.Message):
+    if before.author.bot or not before.guild:
+        return
+    if before.content == after.content:
+        return
+
+    embed = discord.Embed(
+        title="✏️ Mesaj Redaktə Edildi",
+        description=f"**Müəllif:** {before.author.mention} (`{before.author.id}`)\n**Kanal:** {before.channel.mention}\n[Mesaja keçid]({after.jump_url})\n\n**Əvvəl:**\n{before.content or '*[Boş]*'}\n\n**Sonra:**\n{after.content or '*[Boş]*'}",
+        color=0xF1C40F,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(before.author), icon_url=before.author.display_avatar.url)
+    await send_mod_log(before.guild, embed)
+
 
 
 @bot.event
@@ -287,31 +331,6 @@ async def on_message(message: discord.Message):
         except Exception as error:
             logger.warning(f"on_message filtr xətası: {error}")
 
-    content_lower = message.content.lower()
-
-    if content_lower.startswith("abi"):
-        # "abi" sözündən sonrakı məzmunu ayırırıq
-        user_text = message.content[3:].strip()
-
-        # Komanda adlarını AI axınından kənarda saxlayırıq
-        command_names = {
-            "profil", "top", "hesabat", "sifirla", "komandalar", "seviyye", "xptop",
-            "warn", "warnings", "temizle", "mute", "unmute",
-            "userinfo", "serverinfo", "avatar", "poll",
-        }
-        first_word = user_text.split()[0].lower() if user_text else ""
-
-        if not user_text:
-            await message.reply("Nə istəyirsən?")
-        elif first_word not in command_names:
-            try:
-                async with message.channel.typing():
-                    ai_text = await ask_ai(user_text)
-                await message.reply(ai_text)
-            except Exception as e:
-                logger.error(f"AI xətası: {e}")
-                await message.reply("Bir xəta baş verdi, sonra yenə yaz.")
-
     # Mövcud prefix komandalarının işləməsi üçün bunu mütləq çağırırıq
     await bot.process_commands(message)
 
@@ -319,7 +338,7 @@ async def on_message(message: discord.Message):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
-        return  # AI handles these, ignore silently
+        return
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("❌ Bu əmri istifadə etmək üçün icazən yoxdur.")
         return
@@ -477,6 +496,15 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
     logger.info(f"Warn verildi | mod={ctx.author.id} user={member.id} reason={reason}")
     await ctx.send(f"⚠️ {member.mention} üçün xəbərdarlıq qeyd edildi. Səbəb: {reason}")
 
+    embed = discord.Embed(
+        title="⚠️ Xəbərdarlıq (Warn) Verildi",
+        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+        color=0xFEE75C,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    await send_mod_log(ctx.guild, embed)
+
 
 @bot.command(name="warnings")
 async def warnings(ctx, member: discord.Member = None):
@@ -510,6 +538,15 @@ async def temizle(ctx, amount: int = 10):
     amount = max(1, min(amount, 100))
     deleted = await ctx.channel.purge(limit=amount + 1)
     info = await ctx.send(f"🧹 {len(deleted) - 1} mesaj silindi.")
+
+    embed = discord.Embed(
+        title="🧹 Mesajlar Təmizləndi",
+        description=f"**Kanal:** {ctx.channel.mention}\n**Moderator:** {ctx.author.mention}\n**Silinən say:** {len(deleted) - 1}",
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    await send_mod_log(ctx.guild, embed)
+
     await asyncio.sleep(4)
     try:
         await info.delete()
@@ -527,6 +564,15 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
     logger.info(f"Mute verildi | mod={ctx.author.id} user={member.id} min={minutes} reason={reason}")
     await ctx.send(f"🔇 {member.mention} {minutes} dəqiqəlik mute edildi. Səbəb: {reason}")
 
+    embed = discord.Embed(
+        title="🔇 Timeout (Mute) Verildi",
+        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Müddət:** {minutes} dəqiqə\n**Səbəb:** {reason}",
+        color=0xE67E22,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    await send_mod_log(ctx.guild, embed)
+
 
 @bot.command(name="unmute")
 @commands.has_permissions(moderate_members=True)
@@ -535,6 +581,125 @@ async def unmute(ctx, member: discord.Member):
     await member.timeout(None, reason=f"{ctx.author} tərəfindən unmute")
     logger.info(f"Unmute verildi | mod={ctx.author.id} user={member.id}")
     await ctx.send(f"🔊 {member.mention} üçün mute ləğv edildi.")
+
+    embed = discord.Embed(
+        title="🔊 Timeout (Mute) Qaldırıldı",
+        description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}",
+        color=0x2ECC71,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    await send_mod_log(ctx.guild, embed)
+
+
+@bot.command(name="kick")
+@commands.has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
+    # Serverdən istifadəçini kənarlaşdırırıq
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini kick edə bilməzsən.")
+        return
+
+    try:
+        await member.kick(reason=f"{ctx.author} | {reason}")
+        logger.info(f"Kick olundu | mod={ctx.author.id} user={member.id} reason={reason}")
+        await ctx.send(f"👢 {member.mention} serverdən kick edildi. Səbəb: {reason}")
+
+        embed = discord.Embed(
+            title="👢 Üzv Kick Edildi",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            color=0xE67E22,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await send_mod_log(ctx.guild, embed)
+    except discord.Forbidden:
+        await ctx.send("❌ Botun bu istifadəçini kick etməyə yetkisi yoxdur (rol iyerarxiyasını yoxlayın).")
+    except Exception as e:
+        await ctx.send(f"❌ Xəta baş verdi: {e}")
+
+
+@bot.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
+    # Serverdən istifadəçini ban edirik
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.")
+        return
+
+    try:
+        await member.ban(reason=f"{ctx.author} | {reason}", delete_message_days=0)
+        logger.info(f"Ban olundu | mod={ctx.author.id} user={member.id} reason={reason}")
+        await ctx.send(f"🔨 {member.mention} serverdən ban edildi. Səbəb: {reason}")
+
+        embed = discord.Embed(
+            title="🔨 Üzv Ban Edildi",
+            description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            color=0xED4245,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+        await send_mod_log(ctx.guild, embed)
+    except discord.Forbidden:
+        await ctx.send("❌ Botun bu istifadəçini ban etməyə yetkisi yoxdur (rol iyerarxiyasını yoxlayın).")
+    except Exception as e:
+        await ctx.send(f"❌ Xəta baş verdi: {e}")
+
+
+@bot.command(name="unban")
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int, *, reason: str = "Səbəb göstərilməyib"):
+    # Banı açırıq
+    try:
+        user = await bot.fetch_user(user_id)
+        await ctx.guild.unban(user, reason=f"{ctx.author} | {reason}")
+        logger.info(f"Unban olundu | mod={ctx.author.id} user={user_id} reason={reason}")
+        await ctx.send(f"🔓 **{user}** (`{user_id}`) üçün ban qaldırıldı.")
+
+        embed = discord.Embed(
+            title="🔓 Ban Qaldırıldı",
+            description=f"**İstifadəçi:** {user} (`{user_id}`)\n**Moderator:** {ctx.author.mention}\n**Səbəb:** {reason}",
+            color=0x57F287,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=str(user), icon_url=user.display_avatar.url)
+        await send_mod_log(ctx.guild, embed)
+    except discord.NotFound:
+        await ctx.send("❌ Bu ID-də istifadəçi tapılmadı və ya ban siyahısında deyil.")
+    except discord.Forbidden:
+        await ctx.send("❌ Botun unban etməyə yetkisi yoxdur.")
+    except Exception as e:
+        await ctx.send(f"❌ Xəta baş verdi: {e}")
+
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    # Yeni üzv qatıldıqda loglayırıq
+    embed = discord.Embed(
+        title="📥 Üzv Qatıldı",
+        description=f"{member.mention} (`{member.id}`) serverə daxil oldu.\n**Hesab yaranma tarixi:** {member.created_at.strftime('%Y-%m-%d %H:%M UTC')}",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    await send_mod_log(member.guild, embed)
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    # Üzv serverdən ayrıldıqda və ya atıldıqda loglayırıq
+    embed = discord.Embed(
+        title="📤 Üzv Ayrıldı",
+        description=f"**{member}** (`{member.id}`) serverdən ayrıldı.",
+        color=0xED4245,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
+    await send_mod_log(member.guild, embed)
+
+
 
 
 def build_progress_bar(current_xp: int, current_level: int) -> str:
@@ -693,6 +858,9 @@ async def komandalar(ctx):
     embed.add_field(name="abi temizle [say]", value="(Mod) Mesajları silir.", inline=False)
     embed.add_field(name="abi mute @user [dəq] [səbəb]", value="(Mod) Timeout verir.", inline=False)
     embed.add_field(name="abi unmute @user", value="(Mod) Timeout-u açır.", inline=False)
+    embed.add_field(name="abi kick @user [səbəb]", value="(Mod) Serverdən atır.", inline=False)
+    embed.add_field(name="abi ban @user [səbəb]", value="(Mod) Serverdən ban edir.", inline=False)
+    embed.add_field(name="abi unban [userID] [səbəb]", value="(Mod) Banı açır.", inline=False)
     embed.add_field(name="abi userinfo [@user]", value="İstifadəçi məlumatı.", inline=False)
     embed.add_field(name="abi serverinfo", value="Server məlumatı.", inline=False)
     embed.add_field(name="abi avatar [@user]", value="Avatarı göstərir.", inline=False)
@@ -806,4 +974,33 @@ async def before_daily_report():
     await bot.wait_until_ready()
 
 
-bot.run(TOKEN)
+async def handle_ping(request):
+    # Render/UptimeRobot üçün keep-alive endpoint
+    return web.Response(text="Bot 7/24 aktivdir!", content_type="text/plain")
+
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/ping", handle_ping)
+
+    port = int(os.getenv("PORT", 8080))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Keep-alive veb server port {port}-də başladı.")
+
+
+async def main():
+    await start_web_server()
+    async with bot:
+        await bot.start(TOKEN)
+
+
+if __name__ == "__main__":
+    if not TOKEN:
+        logger.error("TOKEN tapılmadı! Zəhmət olmasa .env faylında TOKEN qeyd edin.")
+    else:
+        asyncio.run(main())
+

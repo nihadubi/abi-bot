@@ -1,16 +1,16 @@
 # Abi Discord Bot
 
-A feature-rich Discord bot built with `discord.py` for voice activity tracking, XP/level progression, moderation, anti-spam protection, utility commands, and AI chat integration (Groq).
+A feature-rich Discord bot built with `discord.py` for voice activity tracking, XP/level progression, moderation, anti-spam protection, and utility commands.
 
 ## ✨ Features
 
 - 🎙️ Voice activity tracking (total/daily/weekly/monthly)
 - 📊 Leaderboards and periodic reports
 - ⭐ XP + level system for voice participation
-- 🛡️ Moderation commands (`warn`, `warnings`, `temizle`, `mute`, `unmute`)
+- 🛡️ Moderation commands (`warn`, `warnings`, `temizle`, `mute`, `unmute`, `kick`, `ban`, `unban`)
+- 📜 Audit & Mod Log system (message delete/edit, voice events, moderation actions, member join/leave)
 - 🚫 Anti-link and anti-spam protection
 - 🧰 Utility commands (`userinfo`, `serverinfo`, `avatar`, `poll`)
-- 🤖 AI chat replies via Groq API
 - 💾 SQLite persistence (`users`, `sessions`, `warnings`)
 
 ## 📁 Project Structure
@@ -21,6 +21,7 @@ A feature-rich Discord bot built with `discord.py` for voice activity tracking, 
 ├─ database.py
 ├─ requirements.txt
 ├─ .env
+├─ .env.example
 ├─ .gitignore
 ├─ privacy.html
 └─ terms.html
@@ -30,7 +31,6 @@ A feature-rich Discord bot built with `discord.py` for voice activity tracking, 
 
 - Python 3.10+
 - Discord bot token
-- Groq API key
 
 Install dependencies:
 
@@ -44,9 +44,9 @@ Create a `.env` file in the project root:
 
 ```env
 TOKEN=your_discord_bot_token
-GROQ_API_KEY=your_groq_api_key
 REPORT_CHANNEL_ID=123456789012345678
 LEVEL_UP_CHANNEL_ID=123456789012345678
+MOD_LOG_CHANNEL_ID=123456789012345678
 ```
 
 ## 🚀 Run the Bot
@@ -76,6 +76,9 @@ python -m py_compile bot.py database.py
 - `abi temizle [count]`
 - `abi mute @user [minutes] [reason]`
 - `abi unmute @user`
+- `abi kick @user [reason]`
+- `abi ban @user [reason]`
+- `abi unban [userID] [reason]`
 
 ### Utility
 - `abi userinfo [@user]`
