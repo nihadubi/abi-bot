@@ -22,9 +22,9 @@ PREFIX = "abi "
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
-TEMPVOICE_CHANNEL_ID = os.getenv("TEMPVOICE_CHANNEL_ID")
-WELCOME_CHANNEL_ID = os.getenv("WELCOME_CHANNEL_ID") or os.getenv("WELCOME_CHANNEL")
-AUTOROLE_ID = os.getenv("AUTOROLE_ID")
+TEMPVOICE_CHANNEL_ID = os.getenv("TEMPVOICE_CHANNEL_ID", "1544037874226307152")
+WELCOME_CHANNEL_ID = os.getenv("WELCOME_CHANNEL_ID") or os.getenv("WELCOME_CHANNEL", "1467565789447196765")
+AUTOROLE_ID = os.getenv("AUTOROLE_ID", "1198359102968041615")
 BASE_DIR = Path(__file__).resolve().parent
 
 # Moderasiya və anti-spam ayarları
@@ -428,17 +428,13 @@ async def on_ready():
     for guild in bot.guilds:
         # Default environment ayarları serverə tətbiq olunur
         if TEMPVOICE_CHANNEL_ID and str(TEMPVOICE_CHANNEL_ID) != "0":
-            if not db.get_guild_setting(guild.id, "tempvoice_channel"):
-                db.set_guild_setting(guild.id, "tempvoice_channel", str(TEMPVOICE_CHANNEL_ID))
+            db.set_guild_setting(guild.id, "tempvoice_channel", str(TEMPVOICE_CHANNEL_ID))
         if WELCOME_CHANNEL_ID and str(WELCOME_CHANNEL_ID) != "0":
-            if not db.get_guild_setting(guild.id, "welcome_channel"):
-                db.set_guild_setting(guild.id, "welcome_channel", str(WELCOME_CHANNEL_ID))
+            db.set_guild_setting(guild.id, "welcome_channel", str(WELCOME_CHANNEL_ID))
         if AUTOROLE_ID and str(AUTOROLE_ID) != "0":
-            if not db.get_guild_setting(guild.id, "autorole"):
-                db.set_guild_setting(guild.id, "autorole", str(AUTOROLE_ID))
+            db.set_guild_setting(guild.id, "autorole", str(AUTOROLE_ID))
         if LEVEL_UP_CHANNEL_ID and LEVEL_UP_CHANNEL_ID != 0:
-            if not db.get_guild_setting(guild.id, "levelup_channel"):
-                db.set_guild_setting(guild.id, "levelup_channel", str(LEVEL_UP_CHANNEL_ID))
+            db.set_guild_setting(guild.id, "levelup_channel", str(LEVEL_UP_CHANNEL_ID))
 
         temp_list = db.get_guild_temp_channels(guild.id)
         for t in temp_list:
