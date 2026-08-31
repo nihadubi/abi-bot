@@ -1,10 +1,37 @@
 import asyncio
+import base64
 import functools
+import os
+import tempfile
 from collections import deque
 from datetime import datetime
 import discord
 from discord import ui
 import yt_dlp
+
+# Cookie dəstəyi: Render env-dən YTDLP_COOKIES (base64) və ya YTDLP_COOKIES_FILE (yol)
+_cookie_file = None
+
+def _setup_cookies():
+    global _cookie_file
+    # 1) Əgər YTDLP_COOKIES_FILE env var varsa, birbaşa həmin yolu istifadə et
+    cookie_path = os.getenv("YTDLP_COOKIES_FILE")
+    if cookie_path and os.path.isfile(cookie_path):
+        _cookie_file = cookie_path
+        return
+    # 2) Əgər YTDLP_COOKIES env var (base64-encoded Netscape cookie faylı) varsa, müvəqqəti fayla yaz
+    cookie_b64 = os.getenv("YTDLP_COOKIES")
+    if cookie_b64:
+        try:
+            raw = base64.b64decode(cookie_b64)
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", prefix="ytcookies_")
+            tmp.write(raw)
+            tmp.close()
+            _cookie_file = tmp.name
+        except Exception:
+            pass
+
+_setup_cookies()
 
 # yt-dlp konfiqurasiyası
 YTDL_OPTIONS = {
@@ -21,7 +48,16 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    # YouTube bot bloklama problemini azaltmaq üçün player_client
+    "extractor_args": {"youtube": {"player_client": ["ios", "mweb"]}},
 }
+
+# Əgər cookie faylı varsa, yt-dlp-yə ötürürük
+if _cookie_file:
+    YTDL_OPTIONS["cookiefile"] = _cookie_file
+
+# SoundCloud fallback üçün ayrıca konfiqurasiya (YouTube bloklandıqda)
+YTDL_OPTIONS_SC = {**YTDL_OPTIONS, "default_search": "scsearch"}
 
 # ffmpeg stream parametrləri
 FFMPEG_OPTIONS = {
@@ -30,6 +66,8 @@ FFMPEG_OPTIONS = {
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+ytdl_sc = yt_dlp.YoutubeDL(YTDL_OPTIONS_SC)
+
 
 
 class Song:
