@@ -405,8 +405,17 @@ class TempVoiceControlView(ui.View):
 
 @bot.event
 async def on_ready():
+    # Opus audio kitabxanasını aktivləşdiririk
+    if not discord.opus.is_loaded():
+        try:
+            discord.opus._load_default()
+            logger.info("Opus audio kitabxanası uğurla yükləndi.")
+        except Exception as oe:
+            logger.warning(f"Opus yüklənmədi: {oe}")
+
     # Bot açıldıqda View-ləri qeydiyyatdan keçiririk
     bot.add_view(TempVoiceControlView())
+
 
     # Bot açıldıqda hazırda səsdə olanları aktiv sessiyaya əlavə edirik
     voice_sessions.clear()

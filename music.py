@@ -104,9 +104,10 @@ def get_ffmpeg_executable() -> str:
 FFMPEG_EXECUTABLE = get_ffmpeg_executable()
 
 FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
     "options": "-vn",
 }
+
 
 
 
@@ -271,22 +272,26 @@ class GuildMusicPlayer:
             if not self.voice_client or not self.voice_client.is_connected():
                 return
 
+            def _after_callback(err):
+                if err:
+                    print(f"❌ Mahnı oxunarkən xəta: {err}")
+                self.bot.loop.call_soon_threadsafe(self._next.set)
+
             try:
                 self.voice_client.play(
                     source,
-                    after=lambda _: self.bot.loop.call_soon_threadsafe(self._next.set)
+                    after=_after_callback
                 )
             except Exception as e:
+                print(f"❌ voice_client.play xətası: {e}")
                 if self.text_channel:
                     try:
-                        await self.text_channel.send(f"❌ Audio oxutma xətası (ffmpeg tapılmadı?): {e}")
+                        await self.text_channel.send(f"❌ Audio oxutma xətası: {e}")
                     except Exception:
                         pass
                 self.current = None
-                # ffmpeg yoxdursa disconnect olub qayıdırıq
-                if self.voice_client and self.voice_client.is_connected():
-                    await self.voice_client.disconnect()
-                return
+                continue
+
 
             # Mahnı başladıqda gözəl embed və idarəetmə düymələri göndəririk
             if self.text_channel:
