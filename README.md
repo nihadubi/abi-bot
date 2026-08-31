@@ -105,11 +105,24 @@ python -m py_compile bot.py database.py graphics.py
 - `abi ban @user [reason]`
 - `abi unban [userID] [reason]`
 
+### 🎵 Music (Musiqi Sistemi)
+- `abi play [mahnı / link]` — Mahnı oxudur (YouTube / SoundCloud / Link)
+- `abi pause` / `abi resume` — Mahnını dayandırır və ya davam etdirir
+- `abi skip` — Növbəti mahnıya keçir
+- `abi stop` — Musiqini dayandırır və kanaldan çıxır
+- `abi queue` — Mahnı növbəsini göstərir
+- `abi loop` — Cari mahnının təkrar rejimini açıb-bağlayır
+- `abi nowplaying` (`abi np`) — İndi oxunan mahnı və interaktiv idarəetmə düymələri
+- `abi volume [1-100]` — Səs səviyyəsini tənzimləyir
+- `abi join` — Botu səs kanalına çağırır
+
 ### Admin Setup
 - `abi settempvoice #kanal` — TempVoice generator kanalını təyin edir
 - `abi setwelcome #kanal` — Xoşgəldin kartı kanalını təyin edir
 - `abi setautorole @rol` — Yeni üzvlərə avtomatik rol
 - `abi setlevelup #kanal` — Level-Up bildiriş kanalı
+- `abi setupdatelog #kanal` — Update Log kanalı
+- `abi updatelog Başlıq | Dəyişikliklər...` — Yenilənmə elanı göndərir
 
 ### Utility & Help
 - `abi userinfo [@user]`

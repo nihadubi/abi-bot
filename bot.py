@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from database import Database
 import graphics
+from music import GuildMusicPlayer, Song, ytdl, MusicControlView
 
 
 load_dotenv()
@@ -25,7 +26,24 @@ LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
 TEMPVOICE_CHANNEL_ID = os.getenv("TEMPVOICE_CHANNEL_ID", "1544037874226307152")
 WELCOME_CHANNEL_ID = os.getenv("WELCOME_CHANNEL_ID") or os.getenv("WELCOME_CHANNEL", "1467565789447196765")
 AUTOROLE_ID = os.getenv("AUTOROLE_ID", "1198359102968041615")
+UPDATE_LOG_CHANNEL_ID = os.getenv("UPDATE_LOG_CHANNEL_ID", "1544040943446003749")
 BASE_DIR = Path(__file__).resolve().parent
+
+# Bot versiyası və ən son yenilənmə jurnalı (Update Log)
+BOT_VERSION = "2.2.0"
+LATEST_CHANGELOG = {
+    "version": "v2.2.0",
+    "title": "🎵 Yeni Musiqi Sistemi & İnteraktiv Pleyer",
+    "date": datetime.utcnow().strftime("%d.%m.%Y"),
+    "changes": [
+        "**🎶 Yüksək Keyfiyyətli Musiqi Pleyeri**: YouTube, SoundCloud və birbaşa audio linklər üzərindən səs otaqlarında kəsintisiz mahnı oxutma imkanı (`/play` və ya `abi play`).",
+        "**🎛️ İnteraktiv Musiqi Düymələri**: Mahnı başlayanda gələn interaktiv düymələrlə idarəetmə (⏯️ Pauza/Davam, ⏭️ Keç/Skip, 🔁 Təkrar/Loop, 📜 Növbə/Queue, ⏹️ Dayandır/Stop).",
+        "**📜 Ağıllı Növbə (Queue)**: İstədiyiniz qədər mahnını növbəyə əlavə edib ardıcıl dinləmə dəstəyi (`abi queue` / `/queue`).",
+        "**⚡ Zəngin Komandalar**: `/play`, `/pause`, `/resume`, `/skip`, `/stop`, `/queue`, `/loop`, `/nowplaying`, `/volume`, `/join`, `/leave`.",
+        "**🚪 TempVoice Düyməli İdarəetmə**: Şəxsi otaqlar və təmiz adlandırma ilə tam inteqrasiya.",
+        "**🎙️ Canlı XP Qazanma**: Səsdə musiqi dinləyərkən də davamlı canlı XP qazanmaq aktivdir."
+    ]
+}
 
 # Moderasiya və anti-spam ayarları
 ANTI_SPAM_ENABLED = True
@@ -435,6 +453,29 @@ async def on_ready():
             db.set_guild_setting(guild.id, "autorole", str(AUTOROLE_ID))
         if LEVEL_UP_CHANNEL_ID and LEVEL_UP_CHANNEL_ID != 0:
             db.set_guild_setting(guild.id, "levelup_channel", str(LEVEL_UP_CHANNEL_ID))
+        if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0":
+            db.set_guild_setting(guild.id, "update_log_channel", str(UPDATE_LOG_CHANNEL_ID))
+
+        # Avtomatik Update Log Bildirişi (Hər yeni versiyada 1 dəfə göndərilir)
+        log_channel_id = db.get_guild_setting(guild.id, "update_log_channel") or (UPDATE_LOG_CHANNEL_ID if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0" else None)
+        if log_channel_id:
+            last_version = db.get_guild_setting(guild.id, "last_notified_version")
+            if last_version != BOT_VERSION:
+                try:
+                    update_chan = guild.get_channel(int(log_channel_id))
+                    if update_chan:
+                        embed = discord.Embed(
+                            title=f"📢 {LATEST_CHANGELOG['title']} ({LATEST_CHANGELOG['version']})",
+                            description="Server üçün botda aşağıdakı yeni funksiyalar və təkmilləşdirmələr tətbiq edildi:\n\n" + "\n\n".join(f"• {c}" for c in LATEST_CHANGELOG["changes"]),
+                            color=0x5865F2,
+                            timestamp=datetime.utcnow()
+                        )
+                        embed.set_footer(text=f"Abi Bot Yenilənmə Sistemi • Versiya: {LATEST_CHANGELOG['version']} • {LATEST_CHANGELOG['date']}", icon_url=bot.user.display_avatar.url if bot.user else None)
+                        await update_chan.send(embed=embed)
+                        db.set_guild_setting(guild.id, "last_notified_version", BOT_VERSION)
+                        logger.info(f"Update log {log_channel_id} kanalına göndərildi (v{BOT_VERSION}).")
+                except Exception as err:
+                    logger.warning(f"Update log göndərilə bilmədi: {err}")
 
         temp_list = db.get_guild_temp_channels(guild.id)
         for t in temp_list:
@@ -2485,6 +2526,481 @@ async def slash_setautorole(interaction: discord.Interaction, role: discord.Role
     await interaction.response.send_message(embed=embed)
 
 
+@bot.tree.command(name="setupdatelog", description="Bot yenilənmə bildirişlərinin (Update Log) göndəriləcəyi kanalı təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(channel="Yenilənmə bildirişlərinin göndəriləcəyi mətn kanalı")
+async def slash_setupdatelog(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+    db.set_guild_setting(interaction.guild.id, "update_log_channel", str(channel.id))
+    embed = discord.Embed(
+        title="📢 Update Log Kanalı Təyin Edildi",
+        description=f"✅ Bot yenilənmələri və yeni funksiyalar artıq {channel.mention} kanalına göndəriləcək.",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="setupdatelog")
+@commands.has_permissions(administrator=True)
+async def prefix_setupdatelog(ctx, channel: discord.TextChannel):
+    db.set_guild_setting(ctx.guild.id, "update_log_channel", str(channel.id))
+    await send_success_card(
+        ctx,
+        "Update Log Kanalı Təyin Edildi",
+        f"✅ Bot yenilənmələri və yeni funksiyalar artıq {channel.mention} kanalına göndəriləcək."
+    )
+
+
+@bot.tree.command(name="updatelog", description="Update Log kanalına xüsusi yenilənmə elanı göndərir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(title="Yenilənmə başlığı", changes="Dəyişikliklər (vergül və ya | ilə ayırın)")
+async def slash_updatelog(interaction: discord.Interaction, title: str, changes: str):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+
+    chan_id = db.get_guild_setting(interaction.guild.id, "update_log_channel") or (UPDATE_LOG_CHANNEL_ID if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0" else None)
+    if not chan_id:
+        await interaction.response.send_message("❌ Update Log kanalı təyin edilməyib. Əvvəlcə `/setupdatelog #kanal` edin.", ephemeral=True)
+        return
+
+    chan = interaction.guild.get_channel(int(chan_id))
+    if not chan:
+        await interaction.response.send_message("❌ Təyin olunmuş kanal tapılmadı.", ephemeral=True)
+        return
+
+    change_lines = [c.strip() for c in changes.replace("|", "\n").split("\n") if c.strip()]
+    embed = discord.Embed(
+        title=f"📢 {title}",
+        description="Serverimiz üçün botda aşağıdakı yeniliklər tətbiq edildi:\n\n" + "\n".join(f"• {c}" for c in change_lines),
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Yenilənməni paylaşan: {interaction.user.display_name} • abi-bot", icon_url=interaction.user.display_avatar.url)
+    await chan.send(embed=embed)
+    await interaction.response.send_message(f"✅ Yenilənmə elanı {chan.mention} kanalına uğurla göndərildi.", ephemeral=True)
+
+
+@bot.command(name="updatelog")
+@commands.has_permissions(administrator=True)
+async def prefix_updatelog(ctx, *, text: str):
+    parts = [p.strip() for p in text.split("|") if p.strip()]
+    if not parts:
+        await ctx.send("❌ İstifadə: `abi updatelog Başlıq | Dəyişiklik 1 | Dəyişiklik 2 ...`")
+        return
+
+    title = parts[0]
+    changes = parts[1:] if len(parts) > 1 else [parts[0]]
+
+    chan_id = db.get_guild_setting(ctx.guild.id, "update_log_channel") or (UPDATE_LOG_CHANNEL_ID if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0" else None)
+    if not chan_id:
+        await send_error_card(ctx, "Xəta", "Update Log kanalı təyin edilməyib. Əvvəlcə `abi setupdatelog #kanal` edin.")
+        return
+
+    chan = ctx.guild.get_channel(int(chan_id))
+    if not chan:
+        await send_error_card(ctx, "Xəta", "Təyin olunmuş kanal tapılmadı.")
+        return
+
+    embed = discord.Embed(
+        title=f"📢 {title}",
+        description="Serverimiz üçün botda aşağıdakı yeniliklər tətbiq edildi:\n\n" + "\n".join(f"• {c}" for c in changes),
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Yenilənməni paylaşan: {ctx.author.display_name} • abi-bot", icon_url=ctx.author.display_avatar.url)
+    await chan.send(embed=embed)
+    await send_success_card(ctx, "Update Log Göndərildi", f"✅ Yenilənmə elanı {chan.mention} kanalına uğurla göndərildi.")
+
+
+# ==================== MUSİQİ SİSTEMİ (MUSIC COMMANDS) ====================
+
+music_players: dict[int, GuildMusicPlayer] = {}
+
+def get_music_player(guild: discord.Guild) -> GuildMusicPlayer:
+    if guild.id not in music_players:
+        music_players[guild.id] = GuildMusicPlayer(bot, guild)
+    return music_players[guild.id]
+
+
+async def _play_helper(ctx_or_interaction, query: str):
+    """Mahnını axtarıb növbəyə əlavə edən və oxutmağa başlayan ümumi köməkçi funksiya."""
+    is_slash = isinstance(ctx_or_interaction, discord.Interaction)
+    user = ctx_or_interaction.user if is_slash else ctx_or_interaction.author
+    guild = ctx_or_interaction.guild
+
+    if not user.voice or not user.voice.channel:
+        msg = "❌ Mahnı qoşmaq üçün əvvəlcə bir səs kanalında olmalısınız."
+        if is_slash:
+            await ctx_or_interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await send_error_card(ctx_or_interaction, "Xəta", msg)
+        return
+
+    if is_slash:
+        await ctx_or_interaction.response.defer()
+
+    voice_channel = user.voice.channel
+    player = get_music_player(guild)
+    player.text_channel = ctx_or_interaction.channel
+
+    # Bot səs kanalında deyilsə və ya başqa kanaldadırsa, qoşuluruq
+    vc = guild.voice_client
+    if vc is None:
+        try:
+            player.voice_client = await voice_channel.connect()
+        except Exception as e:
+            err_msg = f"Səs kanalına qoşularkən xəta: {e}"
+            if is_slash:
+                await ctx_or_interaction.followup.send(f"❌ {err_msg}")
+            else:
+                await send_error_card(ctx_or_interaction, "Xəta", err_msg)
+            return
+    else:
+        player.voice_client = vc
+        if vc.channel != voice_channel:
+            await vc.move_to(voice_channel)
+
+    loop = bot.loop or asyncio.get_event_loop()
+    try:
+        import functools
+        partial = functools.partial(ytdl.extract_info, query, download=False)
+        info = await loop.run_in_executor(None, partial)
+    except Exception as e:
+        err_msg = f"Mahnı axtarılarkən xəta yarandı: {e}"
+        if is_slash:
+            await ctx_or_interaction.followup.send(f"❌ {err_msg}")
+        else:
+            await send_error_card(ctx_or_interaction, "Xəta", err_msg)
+        return
+
+    if not info:
+        err_msg = "Mahnı tapılmadı. Zəhmət olmasa başqa bir axtarış sözü və ya link yoxlayın."
+        if is_slash:
+            await ctx_or_interaction.followup.send(f"❌ {err_msg}")
+        else:
+            await send_error_card(ctx_or_interaction, "Xəta", err_msg)
+        return
+
+    if "entries" in info and info["entries"]:
+        song_data = info["entries"][0]
+    else:
+        song_data = info
+
+    song = Song(song_data, user)
+    player.queue.append(song)
+
+    is_currently_playing = player.voice_client and player.voice_client.is_playing()
+
+    if not is_currently_playing:
+        asyncio.create_task(player.play_next_song())
+        msg = f"🎶 **{song.title}** hazırlanır və oxudulur..."
+    else:
+        msg = f"✅ **[{song.title}]({song.webpage_url})** növbəyə əlavə edildi! (Mövqe: `#{len(player.queue)}`)"
+
+    embed = discord.Embed(
+        title="🎵 Musiqi Növbəsi",
+        description=msg,
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    if song.thumbnail:
+        embed.set_thumbnail(url=song.thumbnail)
+    embed.set_footer(text=f"Müddət: {song.formatted_duration} • İstəyən: {user.display_name}")
+
+    if is_slash:
+        await ctx_or_interaction.followup.send(embed=embed)
+    else:
+        await ctx_or_interaction.send(embed=embed)
+
+
+@bot.command(name="play", aliases=["p"])
+async def prefix_play(ctx, *, query: str):
+    """Mahnı oxudur: abi play <mahnı adı və ya link>"""
+    await _play_helper(ctx, query)
+
+
+@bot.tree.command(name="play", description="Səs kanalında mahnı oxudur (YouTube / SoundCloud / Link).")
+@app_commands.describe(query="Mahnı adı və ya YouTube / SoundCloud linki")
+async def slash_play(interaction: discord.Interaction, query: str):
+    await _play_helper(interaction, query)
+
+
+@bot.command(name="pause")
+async def prefix_pause(ctx):
+    vc = ctx.guild.voice_client
+    if vc and vc.is_playing():
+        vc.pause()
+        await send_success_card(ctx, "Pauza", "⏸️ Mahnı dayandırıldı.")
+    else:
+        await send_error_card(ctx, "Xəta", "Hazırda oxunan mahnı yoxdur.")
+
+
+@bot.tree.command(name="pause", description="Oxunan mahnını müvəqqəti dayandırır (Pauza).")
+async def slash_pause(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and vc.is_playing():
+        vc.pause()
+        await interaction.response.send_message("⏸️ Mahnı dayandırıldı.")
+    else:
+        await interaction.response.send_message("❌ Hazırda oxunan mahnı yoxdur.", ephemeral=True)
+
+
+@bot.command(name="resume")
+async def prefix_resume(ctx):
+    vc = ctx.guild.voice_client
+    if vc and vc.is_paused():
+        vc.resume()
+        await send_success_card(ctx, "Davam Edir", "▶️ Mahnı davam etdirilir.")
+    else:
+        await send_error_card(ctx, "Xəta", "Pauzada olan mahnı yoxdur.")
+
+
+@bot.tree.command(name="resume", description="Pauzada olan mahnını davam etdirir.")
+async def slash_resume(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and vc.is_paused():
+        vc.resume()
+        await interaction.response.send_message("▶️ Mahnı davam etdirilir.")
+    else:
+        await interaction.response.send_message("❌ Pauzada olan mahnı yoxdur.", ephemeral=True)
+
+
+@bot.command(name="skip", aliases=["s", "next"])
+async def prefix_skip(ctx):
+    vc = ctx.guild.voice_client
+    if vc and vc.is_playing():
+        vc.stop()
+        await send_success_card(ctx, "Mahnı Keçildi", "⏭️ Növbəti mahnıya keçildi.")
+    else:
+        await send_error_card(ctx, "Xəta", "Keçiləcək aktiv mahnı yoxdur.")
+
+
+@bot.tree.command(name="skip", description="Növbəti mahnıya keçir.")
+async def slash_skip(interaction: discord.Interaction):
+    vc = interaction.guild.voice_client
+    if vc and vc.is_playing():
+        vc.stop()
+        await interaction.response.send_message("⏭️ Növbəti mahnıya keçildi.")
+    else:
+        await interaction.response.send_message("❌ Keçiləcək aktiv mahnı yoxdur.", ephemeral=True)
+
+
+@bot.command(name="stop", aliases=["leave", "dc"])
+async def prefix_stop(ctx):
+    player = get_music_player(ctx.guild)
+    player.queue.clear()
+    player.is_looping = False
+    vc = ctx.guild.voice_client
+    if vc:
+        vc.stop()
+        await vc.disconnect()
+        await send_success_card(ctx, "Dayandırıldı", "⏹️ Musiqi dayandırıldı və bot kanaldan çıxdı.")
+    else:
+        await send_error_card(ctx, "Xəta", "Bot səs kanalında deyil.")
+
+
+@bot.tree.command(name="stop", description="Musiqini dayandırır, növbəni təmizləyir və kanaldan çıxır.")
+async def slash_stop(interaction: discord.Interaction):
+    player = get_music_player(interaction.guild)
+    player.queue.clear()
+    player.is_looping = False
+    vc = interaction.guild.voice_client
+    if vc:
+        vc.stop()
+        await vc.disconnect()
+        await interaction.response.send_message("⏹️ Musiqi dayandırıldı və bot kanaldan çıxdı.")
+    else:
+        await interaction.response.send_message("❌ Bot səs kanalında deyil.", ephemeral=True)
+
+
+@bot.command(name="queue", aliases=["q"])
+async def prefix_queue(ctx):
+    player = get_music_player(ctx.guild)
+    if not player.queue and not player.current:
+        await send_error_card(ctx, "Növbə Boşdur", "Hazırda musiqi növbəsində heç bir mahnı yoxdur.")
+        return
+
+    lines = []
+    if player.current:
+        lines.append(f"▶️ **İndi oxunur:** [{player.current.title}]({player.current.webpage_url}) (`{player.current.formatted_duration}`) — {player.current.requester.mention}\n")
+
+    for i, s in enumerate(list(player.queue)[:10], start=1):
+        lines.append(f"**{i}.** [{s.title}]({s.webpage_url}) (`{s.formatted_duration}`) — {s.requester.mention}")
+
+    if len(player.queue) > 10:
+        lines.append(f"\n*...və daha {len(player.queue) - 10} mahnı növbədədir*")
+
+    loop_status = "Aktiv 🔁" if player.is_looping else "Deaktiv ⏹️"
+    embed = discord.Embed(
+        title=f"📜 Musiqi Növbəsi — {ctx.guild.name}",
+        description="\n".join(lines),
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Təkrar rejimi: {loop_status} • Ümumi mahnı: {len(player.queue) + (1 if player.current else 0)}")
+    await ctx.send(embed=embed)
+
+
+@bot.tree.command(name="queue", description="Hazırkı mahnı növbəsini göstərir.")
+async def slash_queue(interaction: discord.Interaction):
+    player = get_music_player(interaction.guild)
+    if not player.queue and not player.current:
+        await interaction.response.send_message("📜 Hazırda musiqi növbəsində heç bir mahnı yoxdur.", ephemeral=True)
+        return
+
+    lines = []
+    if player.current:
+        lines.append(f"▶️ **İndi oxunur:** [{player.current.title}]({player.current.webpage_url}) (`{player.current.formatted_duration}`) — {player.current.requester.mention}\n")
+
+    for i, s in enumerate(list(player.queue)[:10], start=1):
+        lines.append(f"**{i}.** [{s.title}]({s.webpage_url}) (`{s.formatted_duration}`) — {s.requester.mention}")
+
+    if len(player.queue) > 10:
+        lines.append(f"\n*...və daha {len(player.queue) - 10} mahnı növbədədir*")
+
+    loop_status = "Aktiv 🔁" if player.is_looping else "Deaktiv ⏹️"
+    embed = discord.Embed(
+        title=f"📜 Musiqi Növbəsi — {interaction.guild.name}",
+        description="\n".join(lines),
+        color=0x5865F2,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Təkrar rejimi: {loop_status} • Ümumi mahnı: {len(player.queue) + (1 if player.current else 0)}")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.command(name="loop", aliases=["repeat"])
+async def prefix_loop(ctx):
+    player = get_music_player(ctx.guild)
+    player.is_looping = not player.is_looping
+    status = "**Aktiv edildi** 🔁" if player.is_looping else "**Deaktiv edildi** ⏹️"
+    await send_success_card(ctx, "Təkrar Rejimi", f"Mahnı təkrarı {status}.")
+
+
+@bot.tree.command(name="loop", description="Hazırkı mahnının təkrar rejimini (Loop) açıb-bağlayır.")
+async def slash_loop(interaction: discord.Interaction):
+    player = get_music_player(interaction.guild)
+    player.is_looping = not player.is_looping
+    status = "**Aktiv edildi** 🔁" if player.is_looping else "**Deaktiv edildi** ⏹️"
+    await interaction.response.send_message(f"Təkrar rejimi {status}.")
+
+
+@bot.command(name="nowplaying", aliases=["np"])
+async def prefix_nowplaying(ctx):
+    player = get_music_player(ctx.guild)
+    if not player.current:
+        await send_error_card(ctx, "Xəta", "Hazırda heç bir mahnı oxunmur.")
+        return
+
+    song = player.current
+    embed = discord.Embed(
+        title="🎶 İndi Oxunur",
+        description=f"[{song.title}]({song.webpage_url})\n\n"
+                    f"👤 **İfaçı:** `{song.uploader}`\n"
+                    f"⏱️ **Müddət:** `{song.formatted_duration}`\n"
+                    f"🎧 **İstəyən:** {song.requester.mention}",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    if song.thumbnail:
+        embed.set_thumbnail(url=song.thumbnail)
+    loop_status = "Aktiv 🔁" if player.is_looping else "Deaktiv ⏹️"
+    embed.set_footer(text=f"Təkrar: {loop_status} • Növbədə: {len(player.queue)} mahnı")
+    await ctx.send(embed=embed, view=MusicControlView(player))
+
+
+@bot.tree.command(name="nowplaying", description="Hazırda oxunan mahnı haqqında məlumatı və idarəetmə düymələrini göstərir.")
+async def slash_nowplaying(interaction: discord.Interaction):
+    player = get_music_player(interaction.guild)
+    if not player.current:
+        await interaction.response.send_message("❌ Hazırda heç bir mahnı oxunmur.", ephemeral=True)
+        return
+
+    song = player.current
+    embed = discord.Embed(
+        title="🎶 İndi Oxunur",
+        description=f"[{song.title}]({song.webpage_url})\n\n"
+                    f"👤 **İfaçı:** `{song.uploader}`\n"
+                    f"⏱️ **Müddət:** `{song.formatted_duration}`\n"
+                    f"🎧 **İstəyən:** {song.requester.mention}",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    if song.thumbnail:
+        embed.set_thumbnail(url=song.thumbnail)
+    loop_status = "Aktiv 🔁" if player.is_looping else "Deaktiv ⏹️"
+    embed.set_footer(text=f"Təkrar: {loop_status} • Növbədə: {len(player.queue)} mahnı")
+    await interaction.response.send_message(embed=embed, view=MusicControlView(player))
+
+
+@bot.command(name="volume", aliases=["vol"])
+async def prefix_volume(ctx, volume: int):
+    player = get_music_player(ctx.guild)
+    vc = ctx.guild.voice_client
+    if not vc or not vc.is_playing():
+        await send_error_card(ctx, "Xəta", "Hazırda oxunan mahnı yoxdur.")
+        return
+
+    vol = max(1, min(volume, 100))
+    player.volume = vol / 100.0
+    if vc.source:
+        vc.source.volume = player.volume
+    await send_success_card(ctx, "Səs Səviyyəsi", f"🔊 Səs səviyyəsi **{vol}%** olaraq təyin edildi.")
+
+
+@bot.tree.command(name="volume", description="Musiqinin səs səviyyəsini tənzimləyir (1-100%).")
+@app_commands.describe(percent="Səs səviyyəsi faizi (1 - 100)")
+async def slash_volume(interaction: discord.Interaction, percent: int):
+    player = get_music_player(interaction.guild)
+    vc = interaction.guild.voice_client
+    if not vc or not vc.is_playing():
+        await interaction.response.send_message("❌ Hazırda oxunan mahnı yoxdur.", ephemeral=True)
+        return
+
+    vol = max(1, min(percent, 100))
+    player.volume = vol / 100.0
+    if vc.source:
+        vc.source.volume = player.volume
+    await interaction.response.send_message(f"🔊 Səs səviyyəsi **{vol}%** təyin edildi.")
+
+
+@bot.command(name="join")
+async def prefix_join(ctx):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await send_error_card(ctx, "Xəta", "Səs kanalında deyilsiniz.")
+        return
+    channel = ctx.author.voice.channel
+    player = get_music_player(ctx.guild)
+    vc = ctx.guild.voice_client
+    if vc is None:
+        player.voice_client = await channel.connect()
+    else:
+        player.voice_client = vc
+        await vc.move_to(channel)
+    await send_success_card(ctx, "Qoşuldu", f"🔊 {channel.mention} kanalına qoşuldum.")
+
+
+@bot.tree.command(name="join", description="Botu olduğunuz səs kanalına çağırır.")
+async def slash_join(interaction: discord.Interaction):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("❌ Səs kanalında deyilsiniz.", ephemeral=True)
+        return
+    channel = interaction.user.voice.channel
+    player = get_music_player(interaction.guild)
+    vc = interaction.guild.voice_client
+    if vc is None:
+        player.voice_client = await channel.connect()
+    else:
+        player.voice_client = vc
+        await vc.move_to(channel)
+    await interaction.response.send_message(f"🔊 {channel.mention} kanalına qoşuldum.")
+
+
 @bot.tree.command(name="komandalar", description="Botun bütün əmrlərinin siyahısını və bələdçisini göstərir.")
 async def slash_komandalar(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -2496,6 +3012,11 @@ async def slash_komandalar(interaction: discord.Interaction):
     if bot.user:
         embed.set_thumbnail(url=bot.user.display_avatar.url)
 
+    embed.add_field(
+        name="🎵 Musiqi & Audio",
+        value="• `/play [mahnı]` — Mahnı oxudur (YouTube / Link)\n• `/pause` / `/resume` — Pauza və davam\n• `/skip` — Növbəti mahnı\n• `/queue` — Mahnı növbəsi\n• `/loop` — Təkrar rejimi\n• `/volume [1-100]` — Səs səviyyəsi\n• `/nowplaying` — Cari mahnı və idarəetmə düymələri\n• `/stop` — Dayandırır və kanaldan çıxır",
+        inline=False
+    )
     embed.add_field(
         name="🎙️ Səs & Aktivlik Statistikası",
         value="• `/profil` — Səs aktivliyi və sıralama profili\n• `/top` — Ən çox səsdə qalanların lider cədvəli\n• `/qrafik` — Həftəlik səs aktivliyi diaqramı\n• `abi hesabat [gun/hefte/ay]` — Periodik hesabat",
@@ -2523,7 +3044,7 @@ async def slash_komandalar(interaction: discord.Interaction):
     )
     embed.add_field(
         name="⚙️ Admin Quraşdırma",
-        value="• `/settempvoice` — TempVoice kanalı təyin edir\n• `/setwelcome` — Xoşgəldin kartı kanalı\n• `/setautorole` — Avtomatik rol\n• `/setchannel` — Level bildiriş kanalı",
+        value="• `/settempvoice` — TempVoice kanalı\n• `/setwelcome` — Xoşgəldin kartı kanalı\n• `/setautorole` — Avtomatik rol\n• `/setchannel` — Level bildiriş kanalı\n• `/setupdatelog` — Update log kanalı\n• `/updatelog` — Yenilənmə elanı göndərir",
         inline=False
     )
     embed.add_field(

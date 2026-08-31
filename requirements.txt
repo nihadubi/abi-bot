@@ -3,4 +3,7 @@ python-dotenv
 aiohttp
 pillow
 matplotlib
+PyNaCl
+yt-dlp
 audioop-lts; python_version >= "3.13"
+
