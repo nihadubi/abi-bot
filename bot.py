@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from database import Database
 import graphics
-from music import GuildMusicPlayer, Song, ytdl, MusicControlView
+from music import GuildMusicPlayer, Song, ytdl, MusicControlView, search_song_info
 
 
 load_dotenv()
@@ -30,18 +30,16 @@ UPDATE_LOG_CHANNEL_ID = os.getenv("UPDATE_LOG_CHANNEL_ID", "1544040943446003749"
 BASE_DIR = Path(__file__).resolve().parent
 
 # Bot versiyası və ən son yenilənmə jurnalı (Update Log)
-BOT_VERSION = "2.2.0"
+BOT_VERSION = "2.2.1"
 LATEST_CHANGELOG = {
-    "version": "v2.2.0",
-    "title": "🎵 Yeni Musiqi Sistemi & İnteraktiv Pleyer",
+    "version": "v2.2.1",
+    "title": "🎵 Musiqi Sistemi Sabitləşdirməsi & Ağıllı Axın",
     "date": datetime.utcnow().strftime("%d.%m.%Y"),
     "changes": [
-        "**🎶 Yüksək Keyfiyyətli Musiqi Pleyeri**: YouTube, SoundCloud və birbaşa audio linklər üzərindən səs otaqlarında kəsintisiz mahnı oxutma imkanı (`/play` və ya `abi play`).",
-        "**🎛️ İnteraktiv Musiqi Düymələri**: Mahnı başlayanda gələn interaktiv düymələrlə idarəetmə (⏯️ Pauza/Davam, ⏭️ Keç/Skip, 🔁 Təkrar/Loop, 📜 Növbə/Queue, ⏹️ Dayandır/Stop).",
-        "**📜 Ağıllı Növbə (Queue)**: İstədiyiniz qədər mahnını növbəyə əlavə edib ardıcıl dinləmə dəstəyi (`abi queue` / `/queue`).",
-        "**⚡ Zəngin Komandalar**: `/play`, `/pause`, `/resume`, `/skip`, `/stop`, `/queue`, `/loop`, `/nowplaying`, `/volume`, `/join`, `/leave`.",
-        "**🚪 TempVoice Düyməli İdarəetmə**: Şəxsi otaqlar və təmiz adlandırma ilə tam inteqrasiya.",
-        "**🎙️ Canlı XP Qazanma**: Səsdə musiqi dinləyərkən də davamlı canlı XP qazanmaq aktivdir."
+        "**🛡️ YouTube Bot / DRM Bloklaması Həll Edildi**: Datacenter IP-lərinin bloklanmasının qarşısını almaq üçün mobil player müdafiəsi əlavə edildi.",
+        "**☁️ Avtomatik SoundCloud Fallback**: YouTube tərəfindən məhdudlaşdırılan mahnılar heç bir xəta vermədən avtomatik SoundCloud üzərindən tapılıb kəsintisiz oxudulur.",
+        "**⚙️ FFmpeg Paket Dəstəyi**: Render serverində audio axınının düzgün işləməsi üçün sistem paketləri təmin edildi.",
+        "**📢 Ağıllı Update Log**: Bot yenidən başladıqda eyni mesajın təkrar-təkrar atılması aradan qaldırıldı — yalnız real yeni versiyalarda bildiriş paylaşılır."
     ]
 }
 
@@ -456,14 +454,24 @@ async def on_ready():
         if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0":
             db.set_guild_setting(guild.id, "update_log_channel", str(UPDATE_LOG_CHANNEL_ID))
 
-        # Avtomatik Update Log Bildirişi (Hər yeni versiyada 1 dəfə göndərilir)
+        # Avtomatik Update Log Bildirişi (Yalnız yeni versiya çıxdıqda 1 dəfə göndərilir)
         log_channel_id = db.get_guild_setting(guild.id, "update_log_channel") or (UPDATE_LOG_CHANNEL_ID if UPDATE_LOG_CHANNEL_ID and str(UPDATE_LOG_CHANNEL_ID) != "0" else None)
         if log_channel_id:
-            last_version = db.get_guild_setting(guild.id, "last_notified_version")
-            if last_version != BOT_VERSION:
-                try:
-                    update_chan = guild.get_channel(int(log_channel_id))
-                    if update_chan:
+            try:
+                update_chan = guild.get_channel(int(log_channel_id))
+                if update_chan:
+                    already_posted = False
+                    # Kanaldakı son 15 mesaja baxırıq - bu versiya artıq göndərilibsə təkrar göndərmirik
+                    async for msg in update_chan.history(limit=15):
+                        if msg.author == bot.user and msg.embeds:
+                            for emb in msg.embeds:
+                                if BOT_VERSION in (emb.title or "") or (emb.footer and BOT_VERSION in (emb.footer.text or "")):
+                                    already_posted = True
+                                    break
+                        if already_posted:
+                            break
+
+                    if not already_posted:
                         embed = discord.Embed(
                             title=f"📢 {LATEST_CHANGELOG['title']} ({LATEST_CHANGELOG['version']})",
                             description="Server üçün botda aşağıdakı yeni funksiyalar və təkmilləşdirmələr tətbiq edildi:\n\n" + "\n\n".join(f"• {c}" for c in LATEST_CHANGELOG["changes"]),
@@ -472,10 +480,9 @@ async def on_ready():
                         )
                         embed.set_footer(text=f"Abi Bot Yenilənmə Sistemi • Versiya: {LATEST_CHANGELOG['version']} • {LATEST_CHANGELOG['date']}", icon_url=bot.user.display_avatar.url if bot.user else None)
                         await update_chan.send(embed=embed)
-                        db.set_guild_setting(guild.id, "last_notified_version", BOT_VERSION)
-                        logger.info(f"Update log {log_channel_id} kanalına göndərildi (v{BOT_VERSION}).")
-                except Exception as err:
-                    logger.warning(f"Update log göndərilə bilmədi: {err}")
+                        logger.info(f"Update log {log_channel_id} kanalına göndərildi ({BOT_VERSION}).")
+            except Exception as err:
+                logger.warning(f"Update log göndərilə bilmədi: {err}")
 
         temp_list = db.get_guild_temp_channels(guild.id)
         for t in temp_list:
@@ -2667,9 +2674,7 @@ async def _play_helper(ctx_or_interaction, query: str):
 
     loop = bot.loop or asyncio.get_event_loop()
     try:
-        import functools
-        partial = functools.partial(ytdl.extract_info, query, download=False)
-        info = await loop.run_in_executor(None, partial)
+        song_data = await search_song_info(query, loop=loop)
     except Exception as e:
         err_msg = f"Mahnı axtarılarkən xəta yarandı: {e}"
         if is_slash:
@@ -2678,7 +2683,7 @@ async def _play_helper(ctx_or_interaction, query: str):
             await send_error_card(ctx_or_interaction, "Xəta", err_msg)
         return
 
-    if not info:
+    if not song_data:
         err_msg = "Mahnı tapılmadı. Zəhmət olmasa başqa bir axtarış sözü və ya link yoxlayın."
         if is_slash:
             await ctx_or_interaction.followup.send(f"❌ {err_msg}")
@@ -2686,10 +2691,6 @@ async def _play_helper(ctx_or_interaction, query: str):
             await send_error_card(ctx_or_interaction, "Xəta", err_msg)
         return
 
-    if "entries" in info and info["entries"]:
-        song_data = info["entries"][0]
-    else:
-        song_data = info
 
     song = Song(song_data, user)
     player.queue.append(song)

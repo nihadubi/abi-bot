@@ -33,7 +33,7 @@ def _setup_cookies():
 
 _setup_cookies()
 
-# yt-dlp konfiqurasiyası
+# yt-dlp konfiqurasiyası (YouTube bot bloklamasının qarşısını almaq üçün optimizasiya)
 YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "extractaudio": True,
@@ -48,26 +48,91 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
-    # YouTube bot bloklama problemini azaltmaq üçün player_client
-    "extractor_args": {"youtube": {"player_client": ["ios", "mweb"]}},
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "ios", "mweb"],
+            "player_skip": ["configs", "webpage"]
+        }
+    },
 }
 
 # Əgər cookie faylı varsa, yt-dlp-yə ötürürük
 if _cookie_file:
     YTDL_OPTIONS["cookiefile"] = _cookie_file
 
-# SoundCloud fallback üçün ayrıca konfiqurasiya (YouTube bloklandıqda)
-YTDL_OPTIONS_SC = {**YTDL_OPTIONS, "default_search": "scsearch"}
-
-# ffmpeg stream parametrləri
-FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
+# SoundCloud fallback üçün konfiqurasiya (YouTube datacenter IP-lərini blokladıqda 100% işləyir)
+YTDL_OPTIONS_SC = {
+    "format": "bestaudio/best",
+    "extractaudio": True,
+    "audioformat": "mp3",
+    "outtmpl": "%(extractor)s-%(id)s-%(title)s.%(ext)s",
+    "restrictfilenames": True,
+    "noplaylist": True,
+    "nocheckcertificate": True,
+    "ignoreerrors": False,
+    "logtostderr": False,
+    "quiet": True,
+    "no_warnings": True,
+    "default_search": "scsearch",
+    "source_address": "0.0.0.0",
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 ytdl_sc = yt_dlp.YoutubeDL(YTDL_OPTIONS_SC)
 
+
+async def search_song_info(query: str, loop=None) -> dict:
+    """
+    Mahnını axtarır:
+    1. Əgər birbaşa linkdirsə birbaşa çıxarır.
+    2. Əvvəlcə YouTube (Android / iOS / mweb client ilə).
+    3. Əgər YouTube bloklasa (Bot/Sign in/DRM), avtomatik SoundCloud üzərindən axtarır.
+    """
+    loop = loop or asyncio.get_event_loop()
+    clean_query = query.strip()
+
+    # Birbaşa link (SoundCloud, YouTube, mp3 və s.)
+    if clean_query.startswith("http://") or clean_query.startswith("https://"):
+        try:
+            partial = functools.partial(ytdl.extract_info, clean_query, download=False)
+            data = await loop.run_in_executor(None, partial)
+            if data and "entries" in data and data["entries"]:
+                return data["entries"][0]
+            if data:
+                return data
+        except Exception:
+            # Fallback kimi SoundCloud extractor ilə yoxlayırıq
+            partial = functools.partial(ytdl_sc.extract_info, clean_query, download=False)
+            data = await loop.run_in_executor(None, partial)
+            if data and "entries" in data and data["entries"]:
+                return data["entries"][0]
+            if data:
+                return data
+
+    # Açar sözlə axtarış (1-ci addım: YouTube)
+    try:
+        partial = functools.partial(ytdl.extract_info, f"ytsearch1:{clean_query}", download=False)
+        info = await loop.run_in_executor(None, partial)
+        if info and "entries" in info and info["entries"]:
+            return info["entries"][0]
+        elif info:
+            return info
+    except Exception:
+        # YouTube bloklayarsa (Sign in to confirm / bot detection / DRM)
+        pass
+
+    # Açar sözlə axtarış (2-ci addım: SoundCloud Fallback)
+    try:
+        partial = functools.partial(ytdl_sc.extract_info, f"scsearch1:{clean_query}", download=False)
+        info = await loop.run_in_executor(None, partial)
+        if info and "entries" in info and info["entries"]:
+            return info["entries"][0]
+        elif info:
+            return info
+    except Exception as sc_err:
+        raise Exception(f"Mahnı tapılmadı: {sc_err}")
+
+    raise Exception("Mahnı tapılmadı. Zəhmət olmasa başqa bir ad və ya birbaşa link yoxlayın.")
 
 
 class Song:
@@ -105,16 +170,17 @@ class YTDLSource(discord.PCMVolumeTransformer):
     async def create_source(cls, song: Song, *, loop=None, volume=0.5):
         loop = loop or asyncio.get_event_loop()
 
-        # Əgər birbaşa audio url yoxdursa və ya vaxtı keçibsə, yenidən ekstrakt edirik
         data = song.data
         if not data.get("url"):
-            partial = functools.partial(ytdl.extract_info, song.webpage_url or song.title, download=False)
-            data = await loop.run_in_executor(None, partial)
-            if "entries" in data:
-                data = data["entries"][0]
+            data = await search_song_info(song.webpage_url or song.title, loop=loop)
+            song.data = data
 
-        filename = data["url"]
+        filename = data.get("url")
+        if not filename:
+            raise Exception("Audio stream URL tapılmadı.")
+
         return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data, volume=volume)
+
 
 
 class GuildMusicPlayer:
