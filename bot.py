@@ -300,7 +300,7 @@ async def on_voice_state_update(member, before, after):
                     )
                 }
                 new_room = await member.guild.create_voice_channel(
-                    name=f"🔊・{member.display_name} otağı",
+                    name=f"{member.display_name} otağı",
                     category=category,
                     overwrites=overwrites,
                     user_limit=0,
@@ -312,7 +312,7 @@ async def on_voice_state_update(member, before, after):
                 # İstifadəçiyə otağı idarə etmək üçün DM və ya kanala bildiriş
                 try:
                     embed = discord.Embed(
-                        title="🔊 Şəxsi Səs Otağınız Yaradıldı!",
+                        title="Şəxsi Səs Otağınız Yaradıldı!",
                         description=(
                             f"Xoş gəldiniz, {member.mention}!\n\n"
                             "**Otağınızı idarə etmək üçün komandalar:**\n"
@@ -875,7 +875,7 @@ async def unmute(ctx, member: discord.Member):
         logger.info(f"Unmute verildi | mod={ctx.author.id} user={member.id}")
 
         embed = discord.Embed(
-            title="🔊 Timeout Qaldırıldı (Unmute)",
+            title="Timeout Qaldırıldı (Unmute)",
             description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {ctx.author.mention}",
             color=0x57F287,
             timestamp=datetime.utcnow()
@@ -1263,7 +1263,7 @@ def get_user_temp_channel(member: discord.Member) -> discord.VoiceChannel | None
 @bot.group(name="ses", invoke_without_command=True)
 async def ses_group(ctx):
     embed = discord.Embed(
-        title="🔊 TempVoice (Şəxsi Səs Otağı) İdarəetməsi",
+        title="TempVoice (Şəxsi Səs Otağı) İdarəetməsi",
         description=(
             "Şəxsi səs otağınızda olarkən aşağıdakı əmrlərdən istifadə edə bilərsiniz:\n\n"
             "• `abi ses ad [yeni ad]` — Otağın adını dəyişir\n"
@@ -1288,7 +1288,7 @@ async def ses_ad(ctx, *, yeni_ad: str):
         await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
         return
     yeni_ad = yeni_ad[:32]
-    await chan.edit(name=f"🔊・{yeni_ad}")
+    await chan.edit(name=f"{yeni_ad}")
     await send_success_card(ctx, "Otaq Adı Dəyişdirildi", f"✅ Otağın yeni adı: **🔊・{yeni_ad}**")
 
 
@@ -1456,7 +1456,7 @@ async def komandalar(ctx):
     )
 
     embed.add_field(
-        name="🔊 TempVoice (Şəxsi Səs Otağı)",
+        name="TempVoice (Şəxsi Səs Otağı)",
         value=(
             "• `abi ses ad [ad]` — Otağın adını dəyişir\n"
             "• `abi ses limit [say]` — İstifadəçi limiti\n"
@@ -1578,7 +1578,7 @@ async def adminkomandalar(ctx, command_name: str = None):
             ),
         },
         "unmute": {
-            "title": "🔊 Timeout-u açmaq",
+            "title": "Timeout-u açmaq",
             "text": (
                 "**İstifadə:** `abi unmute @istifadəçi`\n"
                 "**İcazə:** Üzvləri moderasiya et\n\n"
@@ -2054,7 +2054,7 @@ async def slash_unmute(interaction: discord.Interaction, member: discord.Member)
     try:
         await member.timeout(None, reason=f"{interaction.user} tərəfindən unmute")
         embed = discord.Embed(
-            title="🔊 Timeout Qaldırıldı (Unmute)",
+            title="Timeout Qaldırıldı (Unmute)",
             description=f"**İstifadəçi:** {member.mention} (`{member.id}`)\n**Moderator:** {interaction.user.mention}",
             color=0x57F287,
             timestamp=datetime.utcnow()
@@ -2226,7 +2226,7 @@ async def slash_settempvoice(interaction: discord.Interaction, channel: discord.
         return
     db.set_guild_setting(interaction.guild.id, "tempvoice_channel", str(channel.id))
     embed = discord.Embed(
-        title="🔊 TempVoice Quraşdırıldı",
+        title="TempVoice Quraşdırıldı",
         description=f"✅ **Otaq Yarat** kanalı təyin edildi: {channel.mention}\nİstifadəçilər bu kanala daxil olduqda onlar üçün avtomatik şəxsi otaq açılacaq.",
         color=0x57F287,
         timestamp=datetime.utcnow()
@@ -2298,7 +2298,7 @@ async def slash_komandalar(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
-        name="🔊 TempVoice (Şəxsi Otaq)",
+        name="TempVoice (Şəxsi Otaq)",
         value="• `abi ses ad / limit / kilid / ac / at / devret / lider` — Otaq idarəetməsi",
         inline=False
     )
