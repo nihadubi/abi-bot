@@ -2694,7 +2694,7 @@ async def _play_helper(ctx_or_interaction, query: str):
     song = Song(song_data, user)
     player.queue.append(song)
 
-    is_currently_playing = player.voice_client and player.voice_client.is_playing()
+    is_currently_playing = player._playing or (player.voice_client and player.voice_client.is_playing())
 
     if not is_currently_playing:
         asyncio.create_task(player.play_next_song())

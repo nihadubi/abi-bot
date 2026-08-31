@@ -92,9 +92,18 @@ class GuildMusicPlayer:
         self.volume: float = 0.5
         self.text_channel: discord.TextChannel | None = None
         self._next = asyncio.Event()
+        self._playing = False  # play_next_song loop aktiv olub-olmadığını izləyir
 
     async def play_next_song(self):
         """Növbəti mahnını başladır."""
+        self._playing = True
+        try:
+            await self._play_loop()
+        finally:
+            self._playing = False
+
+    async def _play_loop(self):
+        """Daxili oxutma döngəsi."""
         while True:
             self._next.clear()
 
@@ -122,15 +131,28 @@ class GuildMusicPlayer:
                         await self.text_channel.send(f"❌ **{self.current.title}** mahnısı oxunarkən xəta yarandı: {e}")
                     except Exception:
                         pass
+                self.current = None
                 continue
 
             if not self.voice_client or not self.voice_client.is_connected():
                 return
 
-            self.voice_client.play(
-                source,
-                after=lambda _: self.bot.loop.call_soon_threadsafe(self._next.set)
-            )
+            try:
+                self.voice_client.play(
+                    source,
+                    after=lambda _: self.bot.loop.call_soon_threadsafe(self._next.set)
+                )
+            except Exception as e:
+                if self.text_channel:
+                    try:
+                        await self.text_channel.send(f"❌ Audio oxutma xətası (ffmpeg tapılmadı?): {e}")
+                    except Exception:
+                        pass
+                self.current = None
+                # ffmpeg yoxdursa disconnect olub qayıdırıq
+                if self.voice_client and self.voice_client.is_connected():
+                    await self.voice_client.disconnect()
+                return
 
             # Mahnı başladıqda gözəl embed və idarəetmə düymələri göndəririk
             if self.text_channel:
