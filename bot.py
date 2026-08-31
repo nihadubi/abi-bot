@@ -13,6 +13,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 from database import Database
+import graphics
 
 
 load_dotenv()
@@ -21,7 +22,6 @@ PREFIX = "abi "
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
-MOD_LOG_CHANNEL_ID = int(os.getenv("MOD_LOG_CHANNEL_ID", 0))
 BASE_DIR = Path(__file__).resolve().parent
 
 # Moderasiya və anti-spam ayarları
@@ -73,42 +73,6 @@ def truncate_text(value: str, limit: int = 900) -> str:
     return value if len(value) <= limit else f"{value[:limit - 1]}…"
 
 
-def build_audit_embed(title: str, color: int, member: discord.abc.User):
-    embed = discord.Embed(title=title, color=color, timestamp=datetime.utcnow())
-    embed.set_author(name=str(member), icon_url=member.display_avatar.url)
-    embed.set_footer(text="abi-bot • Audit Log")
-    return embed
-
-
-async def send_mod_log(guild: discord.Guild, embed: discord.Embed):
-    # Log kanalına embed göndəririk (Server tənzimləməsi və ya MOD_LOG_CHANNEL_ID əsasında)
-    if not guild:
-        return
-
-    # İlk öncə bazadakı dinamik quraşdırmanı yoxlayırıq
-    target_channel_id = db.get_guild_setting(guild.id, "mod_log_channel")
-    if target_channel_id:
-        try:
-            target_channel_id = int(target_channel_id)
-        except ValueError:
-            target_channel_id = None
-
-    # Əgər bazada yoxdursa, .env-dəki ümumi ID-yə baxırıq
-    if not target_channel_id:
-        target_channel_id = MOD_LOG_CHANNEL_ID
-
-    if not target_channel_id:
-        return
-
-    channel = guild.get_channel(target_channel_id)
-    if channel:
-        try:
-            await channel.send(embed=embed)
-        except Exception as e:
-            logger.warning(f"Mod log göndərilə bilmədi: {e}")
-
-
-
 def is_exempt_member(member: discord.Member) -> bool:
     # Admin və mesaj idarə etmə icazəsi olan istifadəçiləri filtrlərdən azad edirik
     if member.guild_permissions.administrator:
@@ -156,7 +120,6 @@ COMMAND_GUIDANCE = {
     "ban": ("`abi ban @istifadəçi [səbəb]`", "`abi ban @Nihad Təkrar qayda pozuntusu`"),
     "unban": ("`abi unban [istifadəçi ID] [səbəb]`", "`abi unban 123456789012345678 Səhv ban`"),
     "sifirla": ("`abi sifirla @istifadəçi`", "`abi sifirla @Nihad`"),
-    "setlog": ("`abi setlog #kanal`", "`abi setlog #mod-log`"),
     "adminkomandalar": ("`abi adminkomandalar [əmr]`", "`abi adminkomandalar warn`"),
     "poll": ("`abi poll Sual | Variant 1 | Variant 2`", "`abi poll Hansı oyun? | CS2 | Valorant`"),
     "hesabat": ("`abi hesabat [gun/hefte/ay]`", "`abi hesabat hefte`"),
@@ -285,6 +248,19 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
 
+    # Başlanğıcda boş qalmış köhnə temp kanalları təmizləyirik
+    for guild in bot.guilds:
+        temp_list = db.get_guild_temp_channels(guild.id)
+        for t in temp_list:
+            chan = guild.get_channel(t["channel_id"])
+            if chan is None or len(chan.members) == 0:
+                db.remove_temp_channel(t["channel_id"])
+                if chan:
+                    try:
+                        await chan.delete(reason="TempVoice boş kanal təmizləndi")
+                    except Exception:
+                        pass
+
     print(f"{bot.user} olaraq daxil olundu.")
 
 
@@ -297,124 +273,115 @@ async def on_voice_state_update(member, before, after):
     # Səsə qoşulma halında sessiyanı başladırıq
     if before.channel is None and after.channel is not None:
         voice_sessions[member.id] = datetime.utcnow()
-        embed = build_audit_embed("🎙️ Səs Kanalına Qoşuldu", SUCCESS_COLOR, member)
-        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
-        embed.add_field(name="Kanal", value=after.channel.mention, inline=True)
-        embed.add_field(name="Hadisə", value="Səs kanalına qoşuldu", inline=False)
-        await send_mod_log(member.guild, embed)
-        return
 
     # Səsdən çıxma halında sessiyanı yadda saxlayırıq
     if before.channel is not None and after.channel is None:
         started_at = voice_sessions.get(member.id)
-        seconds = 0
         if started_at:
             seconds = int((datetime.utcnow() - started_at).total_seconds())
             if seconds > 0:
                 db.add_voice_time(member.id, member.name, member.display_name, seconds)
             voice_sessions.pop(member.id, None)
 
-        embed = build_audit_embed("🚪 Səs Kanalından Ayrıldı", ERROR_COLOR, member)
-        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
-        embed.add_field(name="Kanal", value=before.channel.mention, inline=True)
-        embed.add_field(name="Sessiya Müddəti", value=f"`{format_time(seconds)}`" if seconds > 0 else "Qeyd olunmayıb", inline=False)
-        await send_mod_log(member.guild, embed)
-        return
+    # 🚪 TempVoice Sistemi: "Otaq Yarat" kanalına qoşulma
+    if after.channel is not None and (before.channel is None or before.channel.id != after.channel.id):
+        temp_master_id = db.get_guild_setting(member.guild.id, "tempvoice_channel")
+        if temp_master_id and str(after.channel.id) == str(temp_master_id):
+            try:
+                category = after.channel.category
+                overwrites = {
+                    member.guild.default_role: discord.PermissionOverwrite(connect=True, speak=True),
+                    member: discord.PermissionOverwrite(
+                        manage_channels=True,
+                        move_members=True,
+                        mute_members=True,
+                        deafen_members=True,
+                        priority_speaker=True
+                    )
+                }
+                new_room = await member.guild.create_voice_channel(
+                    name=f"🔊・{member.display_name} otağı",
+                    category=category,
+                    overwrites=overwrites,
+                    user_limit=0,
+                    reason=f"TempVoice: {member} tərəfindən yaradıldı"
+                )
+                db.add_temp_channel(new_room.id, member.guild.id, member.id)
+                await member.move_to(new_room)
 
-    # Kanal dəyişməsi
-    if before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
-        embed = build_audit_embed("🔄 Səs Kanalı Dəyişdi", BRAND_COLOR, member)
-        embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=False)
-        embed.add_field(name="Əvvəlki Kanal", value=before.channel.mention, inline=True)
-        embed.add_field(name="Yeni Kanal", value=after.channel.mention, inline=True)
-        await send_mod_log(member.guild, embed)
-        return
+                # İstifadəçiyə otağı idarə etmək üçün DM və ya kanala bildiriş
+                try:
+                    embed = discord.Embed(
+                        title="🔊 Şəxsi Səs Otağınız Yaradıldı!",
+                        description=(
+                            f"Xoş gəldiniz, {member.mention}!\n\n"
+                            "**Otağınızı idarə etmək üçün komandalar:**\n"
+                            "• `/voice name [ad]` və ya `abi ses ad [ad]` — Otağın adını dəyişir\n"
+                            "• `/voice limit [say]` və ya `abi ses limit [say]` — İstifadəçi limitini təyin edir\n"
+                            "• `/voice lock` və ya `abi ses kilid` — Otağı kilidləyir\n"
+                            "• `/voice unlock` və ya `abi ses ac` — Kilidi açır\n"
+                            "• `/voice kick @user` və ya `abi ses at @user` — Şəxsi otaqdan atır\n"
+                        ),
+                        color=0x57F287,
+                        timestamp=datetime.utcnow()
+                    )
+                    embed.set_footer(text="Otaqdakı hər kəs çıxdıqda kanal avtomatik silinəcək • abi-bot")
+                    await new_room.send(embed=embed)
+                except Exception:
+                    pass
+            except Exception as err:
+                logger.error(f"TempVoice yaradılarkən xəta: {err}")
 
-
-async def log_deleted_message(message: discord.Message, bulk_delete: bool = False):
-    """Tək və ya toplu silinən bütün mesajları audit kanalına yazır."""
-    if not message.guild:
-        return
-
-    embed = build_audit_embed("🗑️ Mesaj Silindi", ERROR_COLOR, message.author)
-    embed.add_field(name="Müəllif", value=f"{message.author.mention}\n`{message.author.id}`", inline=True)
-    embed.add_field(name="Kanal", value=message.channel.mention, inline=True)
-    embed.add_field(
-        name="Məzmun",
-        value=truncate_text(message.content or "[Mətn yoxdur — fayl və ya embed]"),
-        inline=False,
-    )
-    if bulk_delete:
-        embed.add_field(name="Silmə Növü", value="Toplu təmizləmə", inline=True)
-    embed.set_footer(text=f"abi-bot • Audit Log • Message ID: {message.id}")
-    await send_mod_log(message.guild, embed)
-
-
-@bot.event
-async def on_message_delete(message: discord.Message):
-    await log_deleted_message(message)
-
-
-@bot.event
-async def on_bulk_message_delete(messages):
-    # `abi sil` kimi purge əməliyyatları tək-tək deyil, bu event ilə gəlir.
-    for message in messages:
-        await log_deleted_message(message, bulk_delete=True)
-
-
-async def log_uncached_delete(guild_id: int, channel_id: int, message_id: int, bulk_delete: bool = False):
-    """Cache-də olmayan silinmiş mesajın mövcud metadata-sını loglayır."""
-    guild = bot.get_guild(guild_id)
-    if guild is None:
-        return
-
-    channel = guild.get_channel(channel_id)
-    channel_value = channel.mention if channel else f"`{channel_id}`"
-    embed = discord.Embed(title="🗑️ Mesaj Silindi", color=ERROR_COLOR, timestamp=datetime.utcnow())
-    embed.add_field(name="Kanal", value=channel_value, inline=True)
-    embed.add_field(name="Mesaj ID", value=f"`{message_id}`", inline=True)
-    embed.add_field(
-        name="Məzmun",
-        value="[Mesaj cache-də olmadığı üçün məzmun və müəllif mövcud deyil]",
-        inline=False,
-    )
-    if bulk_delete:
-        embed.add_field(name="Silmə Növü", value="Toplu təmizləmə", inline=True)
-    embed.set_footer(text="abi-bot • Audit Log")
-    await send_mod_log(guild, embed)
+    # 🚪 TempVoice Sistemi: Otaqdan çıxış və boş qalan otağın avtomatik silinməsi
+    if before.channel is not None and (after.channel is None or before.channel.id != after.channel.id):
+        temp_data = db.get_temp_channel(before.channel.id)
+        if temp_data:
+            # Əgər otaqda heç kim qalmayıbsa, kanalı silirik
+            if len(before.channel.members) == 0:
+                db.remove_temp_channel(before.channel.id)
+                try:
+                    await before.channel.delete(reason="TempVoice boşaldığı üçün silindi")
+                except Exception:
+                    pass
 
 
 @bot.event
-async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
-    # Cache-də olan mesajlar artıq on_message_delete ilə yazılır.
-    if payload.guild_id and payload.cached_message is None:
-        await log_uncached_delete(payload.guild_id, payload.channel_id, payload.message_id)
+async def on_member_join(member: discord.Member):
+    # 1. Auto-Role: Avtomatik rol təyin edilməsi
+    autorole_id = db.get_guild_setting(member.guild.id, "autorole")
+    if autorole_id:
+        try:
+            role = member.guild.get_role(int(autorole_id))
+            if role:
+                await member.add_roles(role, reason="Auto-Role: Yeni üzvə avtomatik rol verildi")
+        except Exception as err:
+            logger.warning(f"Auto-Role verilə bilmədi | user={member.id} role={autorole_id} err={err}")
 
+    # 2. Welcome Image & Message: Gözəl vizual şəkillə qarşılama
+    welcome_chan_id = db.get_guild_setting(member.guild.id, "welcome_channel")
+    if welcome_chan_id:
+        try:
+            chan = member.guild.get_channel(int(welcome_chan_id))
+            if chan:
+                try:
+                    avatar_bytes = await member.display_avatar.read()
+                except Exception:
+                    avatar_bytes = None
 
-@bot.event
-async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent):
-    # Cache-də olmayanları ayrıca yazırıq ki, toplu silinmədə heç bir ID itirilməsin.
-    cached_ids = {message.id for message in payload.cached_messages}
-    if payload.guild_id:
-        for message_id in payload.message_ids - cached_ids:
-            await log_uncached_delete(payload.guild_id, payload.channel_id, message_id, bulk_delete=True)
+                welcome_card = graphics.generate_welcome_card(
+                    avatar_bytes=avatar_bytes,
+                    username=str(member),
+                    guild_name=member.guild.name,
+                    member_count=member.guild.member_count
+                )
 
-
-@bot.event
-async def on_message_edit(before: discord.Message, after: discord.Message):
-    if before.author.bot or not before.guild:
-        return
-    if before.content == after.content:
-        return
-
-    embed = build_audit_embed("✏️ Mesaj Redaktə Edildi", WARNING_COLOR, before.author)
-    embed.add_field(name="Müəllif", value=f"{before.author.mention}\n`{before.author.id}`", inline=True)
-    embed.add_field(name="Kanal", value=before.channel.mention, inline=True)
-    embed.add_field(name="Əvvəl", value=truncate_text(before.content or "[Boş]", 700), inline=False)
-    embed.add_field(name="Sonra", value=truncate_text(after.content or "[Boş]", 700), inline=False)
-    embed.add_field(name="Mesaja Keçid", value=f"[Mesajı aç]({after.jump_url})", inline=False)
-    embed.set_footer(text=f"abi-bot • Audit Log • Message ID: {after.id}")
-    await send_mod_log(before.guild, embed)
+                file = discord.File(welcome_card, filename="welcome.png")
+                await chan.send(
+                    content=f"🎉 Xoş gəldin {member.mention}! Serverimizə qatıldığın üçün şadıq!",
+                    file=file
+                )
+        except Exception as err:
+            logger.warning(f"Welcome mesajı göndərilə bilmədi | guild={member.guild.id} err={err}")
 
 
 
@@ -743,7 +710,6 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
     embed.set_author(name=str(member), icon_url=member.display_avatar.url)
     embed.set_footer(text=f"Ümumi: {total_warns} xəbərdarlıq • abi-bot")
     await ctx.send(embed=embed)
-    await send_mod_log(ctx.guild, embed)
 
 
 @bot.command(name="warnings")
@@ -863,7 +829,6 @@ async def sil(ctx, amount: int = 10):
     )
     embed.set_footer(text=f"İcra edən: {ctx.author.display_name}")
     info = await ctx.send(embed=embed)
-    await send_mod_log(ctx.guild, embed)
 
     await asyncio.sleep(4)
     try:
@@ -895,7 +860,6 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_footer(text=f"Müddət bitmə vaxtı: {(until).strftime('%H:%M:%S UTC')} • abi-bot")
         await ctx.send(embed=embed)
-        await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
         await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçiyə timeout verməyə səlahiyyəti çatmır (Rol iyerarxiyasını yoxlayın).")
     except Exception as e:
@@ -918,7 +882,6 @@ async def unmute(ctx, member: discord.Member):
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await ctx.send(embed=embed)
-        await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
         await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçinin səsini/timeout-unu açmağa səlahiyyəti çatmır.")
     except Exception as e:
@@ -945,7 +908,6 @@ async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await ctx.send(embed=embed)
-        await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
         await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini atmağa (kick) icazəsi yoxdur (Rol iyerarxiyasını yoxlayın).")
     except Exception as e:
@@ -972,7 +934,6 @@ async def ban(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilm
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await ctx.send(embed=embed)
-        await send_mod_log(ctx.guild, embed)
     except discord.Forbidden:
         await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini ban etməyə səlahiyyəti çatmır (Rol iyerarxiyasında botun rolu daha aşağıdadır).")
     except Exception as e:
@@ -996,34 +957,12 @@ async def unban(ctx, user_id: int, *, reason: str = "Səbəb göstərilməyib"):
         )
         embed.set_author(name=str(user), icon_url=user.display_avatar.url)
         await ctx.send(embed=embed)
-        await send_mod_log(ctx.guild, embed)
     except discord.NotFound:
         await send_error_card(ctx, "Tapılmadı", "Bu ID-yə uyğun istifadəçi tapılmadı və ya ban siyahısında deyil.")
     except discord.Forbidden:
         await send_error_card(ctx, "Yetki Xətası", "Botun ban qaldırmağa (unban) səlahiyyəti çatmır.")
     except Exception as e:
         await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
-
-
-
-@bot.event
-async def on_member_join(member: discord.Member):
-    # Yeni üzv qatıldıqda loglayırıq
-    embed = build_audit_embed("📥 Üzv Qoşuldu", SUCCESS_COLOR, member)
-    embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
-    embed.add_field(name="Hesabın Yaradılma Tarixi", value=f"<t:{int(member.created_at.timestamp())}:F>", inline=True)
-    embed.set_thumbnail(url=member.display_avatar.url)
-    await send_mod_log(member.guild, embed)
-
-
-@bot.event
-async def on_member_remove(member: discord.Member):
-    # Üzv serverdən ayrıldıqda və ya atıldıqda loglayırıq
-    embed = build_audit_embed("📤 Üzv Ayrıldı", ERROR_COLOR, member)
-    embed.add_field(name="Üzv", value=f"{member.mention}\n`{member.id}`", inline=True)
-    embed.add_field(name="Hadisə", value="Serverdən ayrıldı və ya çıxarıldı", inline=True)
-    embed.set_thumbnail(url=member.display_avatar.url)
-    await send_mod_log(member.guild, embed)
 
 
 
@@ -1044,9 +983,9 @@ def build_progress_bar(current_xp: int, current_level: int) -> str:
     return f"`[{'■' * filled}{'□' * empty}]` **{percent}%**"
 
 
-@bot.command(name="seviyye")
+@bot.command(name="seviyye", aliases=["rank", "level"])
 async def seviyye(ctx, member: discord.Member = None):
-    # İstifadəçinin level və XP məlumatlarını göstəririk
+    # İstifadəçinin level və XP kartını göstəririk
     target = member or ctx.author
     user = db.get_user(target.id)
 
@@ -1054,26 +993,119 @@ async def seviyye(ctx, member: discord.Member = None):
     current_xp = int(user.get("xp") or 0) if user else 0
     next_level_xp = db.xp_for_level(current_level + 1)
     level_start_xp = db.xp_for_level(current_level)
-    needed_xp = max(next_level_xp - current_xp, 0)
+    rank_position = db.get_user_rank(target.id)
+    streak_info = db.get_streak(target.id)
+    streak = streak_info.get("streak", 0)
 
-    progress_bar = build_progress_bar(current_xp, current_level)
+    try:
+        avatar_bytes = await target.display_avatar.read()
+    except Exception:
+        avatar_bytes = None
+
+    card_buf = graphics.generate_rank_card(
+        avatar_bytes=avatar_bytes,
+        username=target.name,
+        display_name=target.display_name,
+        level=current_level,
+        xp=current_xp,
+        current_level_xp=level_start_xp,
+        next_level_xp=next_level_xp,
+        rank_position=rank_position,
+        streak=streak,
+    )
+    file = discord.File(card_buf, filename="rank.png")
 
     embed = discord.Embed(
-        title=f"⭐ Səviyyə Profili — {target.display_name}",
-        color=0x9B59B6,
+        title=f"⭐ Səviyyə Kartı — {target.display_name}",
+        color=BRAND_COLOR,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url="attachment://rank.png")
+    streak_note = f" • 🔥 Seriya: **{streak} gün**" if streak > 0 else ""
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Sıralama:** `🏆 #{rank_position}` | **Səviyyə:** `🏅 {current_level}`{streak_note}"
+    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+
+    await ctx.send(embed=embed, file=file)
+
+
+@bot.command(name="qrafik", aliases=["chart", "aktivlik"])
+async def qrafik(ctx, member: discord.Member = None):
+    """İstifadəçinin son 7 günlük səs aktivliyi qrafikini göstərir."""
+    target = member or ctx.author
+    history = db.get_user_daily_history(target.id, days=7)
+
+    chart_buf = graphics.generate_voice_chart(history, target.display_name)
+    file = discord.File(chart_buf, filename="activity.png")
+
+    total_sec = sum(d["seconds"] for d in history)
+    embed = discord.Embed(
+        title=f"📈 Həftəlik Səs Aktivliyi — {target.display_name}",
+        description=f"{target.mention} üçün son 7 günün statistikası:\n**Ümumi Aktivlik:** `{format_time(total_sec)}`",
+        color=BRAND_COLOR,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url="attachment://activity.png")
+    embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name} • abi-bot", icon_url=ctx.author.display_avatar.url)
+    await ctx.send(embed=embed, file=file)
+
+
+@bot.command(name="streak", aliases=["seriya"])
+async def streak(ctx, member: discord.Member = None):
+    """İstifadəçinin gündəlik səs seriyasını (Streak) göstərir."""
+    target = member or ctx.author
+    streak_data = db.get_streak(target.id)
+    cur = streak_data["streak"]
+    highest = streak_data["highest_streak"]
+    active_today = streak_data["active_today"]
+
+    status_str = "🔥 Bu gün aktivdir (+bonus alınıb)" if active_today else "⏳ Bu gün hələ 15 dəqiqə tamamlanmayıb"
+
+    embed = discord.Embed(
+        title=f"🔥 Gündəlik Səs Seriyası — {target.display_name}",
+        color=0xE67E22 if cur > 0 else 0x95A5A6,
         timestamp=datetime.utcnow()
     )
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.description = f"**İstifadəçi:** {target.mention}\n**Cari Səviyyə:** `🏅 Səviyyə {current_level}`"
-
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Status:** `{status_str}`"
+    embed.add_field(name="🔥 Cari Seriya", value=f"**`{cur} Gün`**", inline=True)
+    embed.add_field(name="🏆 Rekord Seriya", value=f"**`{highest} Gün`**", inline=True)
     embed.add_field(
-        name="✨ Təcrübə (XP)",
-        value=f"```yaml\nCari XP: {current_xp} / {next_level_xp}\nNövbəti səviyyəyə: {needed_xp} XP qaldı\n```",
+        name="💡 Seriya Qaydası",
+        value="Hər gün ən azı **15 dəqiqə** səs kanalında vaxt keçir, seriyanı artır və hər gün üçün əlavə **XP bonusu** qazan!",
         inline=False
     )
-    embed.add_field(name="📈 Səviyyə İrəliləyişi", value=progress_bar, inline=False)
-    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP verilir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+    embed.set_footer(text="Seriyanı qoru, zirvəyə qalx! • abi-bot")
+    await ctx.send(embed=embed)
 
+
+@bot.command(name="streaktop", aliases=["seriyatop"])
+async def streaktop(ctx, number: int = 10):
+    """Serverdə ən yüksək səs seriyasına sahib istifadəçilər."""
+    number = max(1, min(number, 25))
+    rows = db.get_streak_leaderboard(number)
+    if not rows:
+        embed = discord.Embed(
+            description="📭 Hələ heç bir aktiv səs seriyası qeydə alınmayıb.",
+            color=0xE67E22
+        )
+        await ctx.send(embed=embed)
+        return
+
+    lines = []
+    for idx, r in enumerate(rows, start=1):
+        medal = get_medal(idx)
+        name = r.get("display_name") or r.get("username") or "Naməlum"
+        cur = r.get("current_streak") or 0
+        high = r.get("highest_streak") or 0
+        lines.append(f"{medal} **{name}** — 🔥 **`{cur} gün`** (Rekord: `{high}` gün)")
+
+    embed = discord.Embed(
+        title=f"🔥 Ən Yüksək Səs Seriyaları • Top {len(rows)}",
+        description="\n".join(lines),
+        color=0xE67E22,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text="Gündəlik səs aktivliyi liderləri • abi-bot")
     await ctx.send(embed=embed)
 
 
@@ -1216,6 +1248,172 @@ async def poll(ctx, *, text: str):
         await msg.add_reaction(emojis[i])
 
 
+# ==================== TEMPVOICE (ŞƏXSİ SƏS OTAĞI) PREFIX ƏHRAMLARI ====================
+
+def get_user_temp_channel(member: discord.Member) -> discord.VoiceChannel | None:
+    if not member.voice or not member.voice.channel:
+        return None
+    channel = member.voice.channel
+    temp_data = db.get_temp_channel(channel.id)
+    if temp_data and (temp_data["owner_id"] == member.id or member.guild_permissions.administrator):
+        return channel
+    return None
+
+
+@bot.group(name="ses", invoke_without_command=True)
+async def ses_group(ctx):
+    embed = discord.Embed(
+        title="🔊 TempVoice (Şəxsi Səs Otağı) İdarəetməsi",
+        description=(
+            "Şəxsi səs otağınızda olarkən aşağıdakı əmrlərdən istifadə edə bilərsiniz:\n\n"
+            "• `abi ses ad [yeni ad]` — Otağın adını dəyişir\n"
+            "• `abi ses limit [say]` — Otağın istifadəçi limitini təyin edir (0 = limitsiz)\n"
+            "• `abi ses kilid` — Otağı kilidləyir (başqalarının qoşulmasını bağlayır)\n"
+            "• `abi ses ac` — Otağın kilidini açır\n"
+            "• `abi ses at @user` — Göstərilən şəxsi səs otağınızdan çıxarır\n"
+            "• `abi ses devret @user` — Otaq sahibliyini başqa üzvə verir\n"
+            "• `abi ses lider` — Əgər otaq sahibi çıxıbsa, otaq rəhbərliyini ələ alır\n"
+        ),
+        color=BRAND_COLOR,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text="Nümunə: abi ses ad Oyun Otağım • abi-bot")
+    await ctx.send(embed=embed)
+
+
+@ses_group.command(name="ad", aliases=["name"])
+async def ses_ad(ctx, *, yeni_ad: str):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    yeni_ad = yeni_ad[:32]
+    await chan.edit(name=f"🔊・{yeni_ad}")
+    await send_success_card(ctx, "Otaq Adı Dəyişdirildi", f"✅ Otağın yeni adı: **🔊・{yeni_ad}**")
+
+
+@ses_group.command(name="limit")
+async def ses_limit(ctx, say: int):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    say = max(0, min(say, 99))
+    await chan.edit(user_limit=say)
+    limit_text = f"**{say} nəfər**" if say > 0 else "**Limitsiz**"
+    await send_success_card(ctx, "Limit Yeniləndi", f"✅ Otağın istifadəçi limiti: {limit_text}")
+
+
+@ses_group.command(name="kilid", aliases=["lock"])
+async def ses_kilid(ctx):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    await chan.set_permissions(ctx.guild.default_role, connect=False)
+    await send_success_card(ctx, "Otaq Kilidləndi", "🔒 Otaq kilidləndi! Artıq icazəsiz heç kim qoşula bilməz.")
+
+
+@ses_group.command(name="ac", aliases=["unlock"])
+async def ses_ac(ctx):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    await chan.set_permissions(ctx.guild.default_role, connect=True)
+    await send_success_card(ctx, "Kilid Açıldı", "🔓 Otağın kilidi açıldı! Hər kəs qoşula bilər.")
+
+
+@ses_group.command(name="at", aliases=["kick"])
+async def ses_at(ctx, member: discord.Member):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    if member == ctx.author:
+        await send_error_card(ctx, "Xəta", "Özünüzü otaqdan ata bilməzsiniz.")
+        return
+    if member.voice and member.voice.channel == chan:
+        await member.move_to(None, reason=f"{ctx.author} tərəfindən temp otaqdan çıxarıldı")
+        await chan.set_permissions(member, connect=False)
+        await send_success_card(ctx, "İstifadəçi Çıxarıldı", f"👢 {member.mention} otaqdan çıxarıldı və təkrar girişi bağlandı.")
+    else:
+        await send_error_card(ctx, "Xəta", f"{member.mention} sizin otaqda deyil.")
+
+
+@ses_group.command(name="devret", aliases=["transfer"])
+async def ses_devret(ctx, member: discord.Member):
+    chan = get_user_temp_channel(ctx.author)
+    if not chan:
+        await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
+        return
+    if member == ctx.author or member.bot:
+        await send_error_card(ctx, "Xəta", "Keçərsiz istifadəçi.")
+        return
+    if not member.voice or member.voice.channel != chan:
+        await send_error_card(ctx, "Xəta", f"{member.mention} bu səs otağında olmalıdır.")
+        return
+
+    db.add_temp_channel(chan.id, ctx.guild.id, member.id)
+    await chan.set_permissions(member, manage_channels=True, move_members=True, mute_members=True, deafen_members=True)
+    await send_success_card(ctx, "Otaq Sahibliyi Verildi", f"👑 Otaq rəhbərliyi {member.mention} istifadəçisinə verildi.")
+
+
+@ses_group.command(name="lider", aliases=["claim"])
+async def ses_lider(ctx):
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        await send_error_card(ctx, "Xəta", "Səs kanalında deyilsiniz.")
+        return
+    chan = ctx.author.voice.channel
+    temp_data = db.get_temp_channel(chan.id)
+    if not temp_data:
+        await send_error_card(ctx, "Xəta", "Bu kanal xüsusi TempVoice otağı deyil.")
+        return
+
+    owner_id = temp_data["owner_id"]
+    owner_present = any(m.id == owner_id for m in chan.members)
+    if owner_present and owner_id != ctx.author.id:
+        await send_error_card(ctx, "Xəta", "Otağın əsl sahibi hələ də kanaldadır.")
+        return
+
+    db.add_temp_channel(chan.id, ctx.guild.id, ctx.author.id)
+    await chan.set_permissions(ctx.author, manage_channels=True, move_members=True, mute_members=True, deafen_members=True)
+    await send_success_card(ctx, "Otaq Liderliyi Alındı", f"👑 Təbriklər, artıq bu otağın rəhbəri {ctx.author.mention}!")
+
+
+@bot.command(name="settempvoice")
+@commands.has_permissions(administrator=True)
+async def prefix_settempvoice(ctx, channel: discord.VoiceChannel):
+    db.set_guild_setting(ctx.guild.id, "tempvoice_channel", str(channel.id))
+    await send_success_card(
+        ctx,
+        "TempVoice Quraşdırıldı",
+        f"✅ **Otaq Yarat** kanalı təyin edildi: {channel.mention}\nİstifadəçilər bu kanala daxil olduqda onlar üçün avtomatik şəxsi otaq açılacaq."
+    )
+
+
+@bot.command(name="setwelcome")
+@commands.has_permissions(administrator=True)
+async def prefix_setwelcome(ctx, channel: discord.TextChannel):
+    db.set_guild_setting(ctx.guild.id, "welcome_channel", str(channel.id))
+    await send_success_card(
+        ctx,
+        "Xoşgəldin Kanalı Təyin Edildi",
+        f"✅ Yeni qoşulan üzvlər üçün vizual qarşılama kartı {channel.mention} kanalına göndəriləcək."
+    )
+
+
+@bot.command(name="setautorole")
+@commands.has_permissions(administrator=True)
+async def prefix_setautorole(ctx, role: discord.Role):
+    db.set_guild_setting(ctx.guild.id, "autorole", str(role.id))
+    await send_success_card(
+        ctx,
+        "Auto-Role Təyin Edildi",
+        f"✅ Yeni qoşulan bütün üzvlərə avtomatik {role.mention} rolu veriləcək."
+    )
+
+
 @bot.command(name="komandalar")
 async def komandalar(ctx):
     # Bütün əmrləri kateqoriyalarla gözəl menyuda göstəririk
@@ -1233,6 +1431,7 @@ async def komandalar(ctx):
         value=(
             "• `abi profil [@user]` — Səs aktivliyi və sıralama profili\n"
             "• `abi top [say]` — Ən çox səsdə qalanların ümumi lider cədvəli\n"
+            "• `abi qrafik [@user]` — Həftəlik səs aktivliyi diaqramı\n"
             "• `abi hesabat [gun/hefte/ay]` — Periodik səs hesabatı"
         ),
         inline=False
@@ -1241,8 +1440,30 @@ async def komandalar(ctx):
     embed.add_field(
         name="⭐ Səviyyə & XP Sistemi",
         value=(
-            "• `abi seviyye [@user]` — Level, XP kartı və tərəqqi çubuğu\n"
+            "• `abi seviyye [@user]` — Vizual Rank kartı (Level, XP, Progress)\n"
             "• `abi xptop [say]` — Ən yüksək səviyyəli üzvlər"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔥 Seriya (Streak) Sistemi",
+        value=(
+            "• `abi streak [@user]` — Gündəlik səs aktivliyi seriyanız\n"
+            "• `abi streaktop [say]` — Ən yüksək seriyaya sahib üzvlər"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🔊 TempVoice (Şəxsi Səs Otağı)",
+        value=(
+            "• `abi ses ad [ad]` — Otağın adını dəyişir\n"
+            "• `abi ses limit [say]` — İstifadəçi limiti\n"
+            "• `abi ses kilid / ac` — Otağı kilidləyir / açır\n"
+            "• `abi ses at @user` — İstifadəçini otaqdan atır\n"
+            "• `abi ses devret @user` — Sahibliyi verir\n"
+            "• `abi ses lider` — Otaq rəhbərliyini ələ alır"
         ),
         inline=False
     )
@@ -1271,6 +1492,17 @@ async def komandalar(ctx):
             "• `abi avatar [@user]` — Böyüdülmüş profil şəkli\n"
             "• `abi poll Sual | V1 | V2` — İnteraktiv səsvermə sorğusu\n"
             "• `abi sifirla @user` — *(Admin)* Səs statistikasını sıfırlayır"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚙️ Admin Quraşdırma",
+        value=(
+            "• `abi settempvoice #kanal` — TempVoice kanalı təyin edir\n"
+            "• `abi setwelcome #kanal` — Xoşgəldin kartı kanalı\n"
+            "• `abi setautorole @rol` — Avtomatik rol\n"
+            "• `abi setlevelup #kanal` — Level bildiriş kanalı"
         ),
         inline=False
     )
@@ -1385,15 +1617,6 @@ async def adminkomandalar(ctx, command_name: str = None):
                 "**İcazə:** Mesajları idarə et\n\n"
                 "Cari kanaldan 1–100 arası mesajı silir. Əmr mesajı da silinənlərə daxildir.\n\n"
                 "**Nümunə:** `abi sil 25`"
-            ),
-        },
-        "setlog": {
-            "title": "📜 Mod-log kanalını təyin etmək",
-            "text": (
-                "**İstifadə:** `abi setlog #kanal`\n"
-                "**İcazə:** Administrator\n\n"
-                "Warn, kick, ban, silinən/redaktə edilən mesajlar və səs giriş-çıxış loglarını seçilən kanala göndərir.\n\n"
-                "**Nümunə:** `abi setlog #mod-log`"
             ),
         },
         "sifirla": {
@@ -1523,29 +1746,127 @@ async def slash_top(interaction: discord.Interaction, say: int = 10):
     await interaction.response.send_message(embed=embed)
 
 
-@bot.tree.command(name="seviyye", description="İstifadəçinin cari Level və XP kartını göstərir.")
+@bot.tree.command(name="seviyye", description="İstifadəçinin cari Level və XP kartını (Qrafik kartla) göstərir.")
 @app_commands.describe(member="Levelinə baxmaq istədiyiniz üzv")
 async def slash_seviyye(interaction: discord.Interaction, member: discord.Member = None):
+    await interaction.response.defer()
     target = member or interaction.user
     user = db.get_user(target.id)
 
     current_level = int(user.get("level") or 1) if user else 1
     current_xp = int(user.get("xp") or 0) if user else 0
     next_level_xp = db.xp_for_level(current_level + 1)
-    needed_xp = max(next_level_xp - current_xp, 0)
-    progress_bar = build_progress_bar(current_xp, current_level)
+    level_start_xp = db.xp_for_level(current_level)
+    rank_position = db.get_user_rank(target.id)
+    streak_info = db.get_streak(target.id)
+    streak = streak_info.get("streak", 0)
+
+    try:
+        avatar_bytes = await target.display_avatar.read()
+    except Exception:
+        avatar_bytes = None
+
+    card_buf = graphics.generate_rank_card(
+        avatar_bytes=avatar_bytes,
+        username=target.name,
+        display_name=target.display_name,
+        level=current_level,
+        xp=current_xp,
+        current_level_xp=level_start_xp,
+        next_level_xp=next_level_xp,
+        rank_position=rank_position,
+        streak=streak,
+    )
+    file = discord.File(card_buf, filename="rank.png")
 
     embed = discord.Embed(
-        title=f"⭐ Səviyyə Profili — {target.display_name}",
-        color=0x9B59B6,
+        title=f"⭐ Səviyyə Kartı — {target.display_name}",
+        color=BRAND_COLOR,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url="attachment://rank.png")
+    streak_note = f" • 🔥 Seriya: **{streak} gün**" if streak > 0 else ""
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Sıralama:** `🏆 #{rank_position}` | **Səviyyə:** `🏅 {current_level}`{streak_note}"
+    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+
+    await interaction.followup.send(embed=embed, file=file)
+
+
+@bot.tree.command(name="qrafik", description="Son 7 günün səs aktivliyini vizual diaqramla göstərir.")
+@app_commands.describe(member="Qrafikini görmək istədiyiniz üzv (boş qoysanız özünüz)")
+async def slash_qrafik(interaction: discord.Interaction, member: discord.Member = None):
+    await interaction.response.defer()
+    target = member or interaction.user
+    history = db.get_user_daily_history(target.id, days=7)
+
+    chart_buf = graphics.generate_voice_chart(history, target.display_name)
+    file = discord.File(chart_buf, filename="activity.png")
+
+    total_sec = sum(d["seconds"] for d in history)
+    embed = discord.Embed(
+        title=f"📈 Həftəlik Səs Aktivliyi — {target.display_name}",
+        description=f"{target.mention} üçün son 7 günün statistikası:\n**Ümumi Aktivlik:** `{format_time(total_sec)}`",
+        color=BRAND_COLOR,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_image(url="attachment://activity.png")
+    embed.set_footer(text=f"Sorğulayan: {interaction.user.display_name} • abi-bot", icon_url=interaction.user.display_avatar.url)
+    await interaction.followup.send(embed=embed, file=file)
+
+
+@bot.tree.command(name="streak", description="Gündəlik səs aktivliyi seriyanızı (Streak) göstərir.")
+@app_commands.describe(member="Seriyasına baxmaq istədiyiniz üzv")
+async def slash_streak(interaction: discord.Interaction, member: discord.Member = None):
+    target = member or interaction.user
+    streak_data = db.get_streak(target.id)
+    cur = streak_data["streak"]
+    highest = streak_data["highest_streak"]
+    active_today = streak_data["active_today"]
+
+    status_str = "🔥 Bu gün aktivdir (+bonus alınıb)" if active_today else "⏳ Bu gün hələ 15 dəqiqə tamamlanmayıb"
+
+    embed = discord.Embed(
+        title=f"🔥 Gündəlik Səs Seriyası — {target.display_name}",
+        color=0xE67E22 if cur > 0 else 0x95A5A6,
         timestamp=datetime.utcnow()
     )
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.description = f"**İstifadəçi:** {target.mention}\n**Cari Səviyyə:** `🏅 Səviyyə {current_level}`"
-    embed.add_field(name="✨ Təcrübə (XP)", value=f"```yaml\nCari XP: {current_xp} / {next_level_xp}\nNövbəti səviyyəyə: {needed_xp} XP qaldı\n```", inline=False)
-    embed.add_field(name="📈 Səviyyə İrəliləyişi", value=progress_bar, inline=False)
-    embed.set_footer(text="Hər 5 dəqiqə səsdə qalmağa 10 XP verilir • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
+    embed.description = f"**İstifadəçi:** {target.mention}\n**Status:** `{status_str}`"
+    embed.add_field(name="🔥 Cari Seriya", value=f"**`{cur} Gün`**", inline=True)
+    embed.add_field(name="🏆 Rekord Seriya", value=f"**`{highest} Gün`**", inline=True)
+    embed.add_field(
+        name="💡 Seriya Qaydası",
+        value="Hər gün ən azı **15 dəqiqə** səs kanalında vaxt keçir, seriyanı artır və hər gün üçün əlavə **XP bonusu** qazan!",
+        inline=False
+    )
+    embed.set_footer(text="Seriyanı qoru, zirvəyə qalx! • abi-bot")
+    await interaction.response.send_message(embed=embed)
 
+
+@bot.tree.command(name="streaktop", description="Serverdə ən yüksək səs seriyasına (Streak) sahib üzvlər.")
+@app_commands.describe(say="Göstəriləcək üzv sayı (məs: 10)")
+async def slash_streaktop(interaction: discord.Interaction, say: int = 10):
+    say = max(1, min(say, 25))
+    rows = db.get_streak_leaderboard(say)
+    if not rows:
+        await interaction.response.send_message("📭 Hələ heç bir aktiv səs seriyası qeydə alınmayıb.", ephemeral=True)
+        return
+
+    lines = []
+    for idx, r in enumerate(rows, start=1):
+        medal = get_medal(idx)
+        name = r.get("display_name") or r.get("username") or "Naməlum"
+        cur = r.get("current_streak") or 0
+        high = r.get("highest_streak") or 0
+        lines.append(f"{medal} **{name}** — 🔥 **`{cur} gün`** (Rekord: `{high}` gün)")
+
+    embed = discord.Embed(
+        title=f"🔥 Ən Yüksək Səs Seriyaları • Top {len(rows)}",
+        description="\n".join(lines),
+        color=0xE67E22,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text="Gündəlik səs aktivliyi liderləri • abi-bot")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1669,7 +1990,6 @@ async def slash_kick(interaction: discord.Interaction, member: discord.Member, r
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
-        await send_mod_log(interaction.guild, embed)
     except discord.Forbidden:
         await interaction.response.send_message("❌ Botun bu istifadəçini atmağa (kick) icazəsi yoxdur (Rol iyerarxiyasını yoxlayın).", ephemeral=True)
     except Exception as e:
@@ -1694,7 +2014,6 @@ async def slash_ban(interaction: discord.Interaction, member: discord.Member, re
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
-        await send_mod_log(interaction.guild, embed)
     except discord.Forbidden:
         await interaction.response.send_message("❌ Botun bu istifadəçini ban etməyə səlahiyyəti çatmır.", ephemeral=True)
     except Exception as e:
@@ -1722,7 +2041,6 @@ async def slash_mute(interaction: discord.Interaction, member: discord.Member, m
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         embed.set_footer(text=f"Müddət bitmə vaxtı: {(until).strftime('%H:%M:%S UTC')} • abi-bot")
         await interaction.response.send_message(embed=embed)
-        await send_mod_log(interaction.guild, embed)
     except discord.Forbidden:
         await interaction.response.send_message("❌ Botun bu istifadəçiyə timeout verməyə səlahiyyəti çatmır.", ephemeral=True)
     except Exception as e:
@@ -1743,7 +2061,6 @@ async def slash_unmute(interaction: discord.Interaction, member: discord.Member)
         )
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
-        await send_mod_log(interaction.guild, embed)
     except discord.Forbidden:
         await interaction.response.send_message("❌ Botun timeout-u açmağa yetkisi yoxdur.", ephemeral=True)
     except Exception as e:
@@ -1766,7 +2083,6 @@ async def slash_sil(interaction: discord.Interaction, say: int = 10):
     )
     embed.set_footer(text=f"İcra edən: {interaction.user.display_name}")
     await interaction.followup.send(embed=embed, ephemeral=True)
-    await send_mod_log(interaction.guild, embed)
 
 
 @bot.tree.command(name="warn", description="İstifadəçiyə rəsmi xəbərdarlıq qeyd edir.")
@@ -1803,7 +2119,6 @@ async def slash_warn(interaction: discord.Interaction, member: discord.Member, r
     embed.set_author(name=str(member), icon_url=member.display_avatar.url)
     embed.set_footer(text=f"Ümumi: {total_warns} xəbərdarlıq • abi-bot")
     await interaction.response.send_message(embed=embed)
-    await send_mod_log(interaction.guild, embed)
 
 
 @bot.tree.command(name="warnings", description="İstifadəçinin xəbərdarlıq tarixçəsini göstərir.")
@@ -1872,44 +2187,18 @@ async def slash_clearwarn(interaction: discord.Interaction, member: discord.Memb
         await interaction.response.send_message(f"❌ {member.mention} üçün silinəcək aktiv xəbərdarlıq tapılmadı.", ephemeral=True)
 
 
-@bot.tree.command(name="setlog", description="Audit & Mod Loglarının göndəriləcəyi kanalı təyin edir.")
+@bot.tree.command(name="setchannel", description="Səviyyə (Level-Up) bildiriş kanalını təyin edir.")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(channel="Log mesajlarının göndəriləcəyi mətn kanalı")
-async def slash_setlog(interaction: discord.Interaction, channel: discord.TextChannel):
+@app_commands.describe(channel="Səviyyə bildirişlərinin göndəriləcəyi mətn kanalı")
+async def slash_setchannel(interaction: discord.Interaction, channel: discord.TextChannel):
     if not interaction.guild:
         await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
         return
 
-    db.set_guild_setting(interaction.guild.id, "mod_log_channel", str(channel.id))
-    embed = discord.Embed(
-        title="⚙️ Log Kanalı Təyin Edildi",
-        description=f"✅ Mod və Audit logları artıq {channel.mention} kanalına göndəriləcək.",
-        color=0x57F287,
-        timestamp=datetime.utcnow()
-    )
-    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
-    await interaction.response.send_message(embed=embed)
-
-
-@bot.tree.command(name="setchannel", description="Botun avtomatik bildiriş kanallarını təyin edir.")
-@app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    type="Quraşdırmaq istədiyiniz bildiriş növü",
-    channel="Təyin ediləcək mətn kanalı"
-)
-@app_commands.choices(type=[
-    app_commands.Choice(name="📜 Mod & Audit Log Kanalı", value="mod_log_channel"),
-    app_commands.Choice(name="🎉 Səviyyə (Level-Up) Bildiriş Kanalı", value="levelup_channel")
-])
-async def slash_setchannel(interaction: discord.Interaction, type: app_commands.Choice[str], channel: discord.TextChannel):
-    if not interaction.guild:
-        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
-        return
-
-    db.set_guild_setting(interaction.guild.id, type.value, str(channel.id))
+    db.set_guild_setting(interaction.guild.id, "levelup_channel", str(channel.id))
     embed = discord.Embed(
         title="⚙️ Kanal Quraşdırması Uğurlu",
-        description=f"✅ **{type.name}** üçün təyin edilmiş kanal: {channel.mention}",
+        description=f"✅ Səviyyə (Level-Up) bildirişləri artıq {channel.mention} kanalına göndəriləcək.",
         color=0x57F287,
         timestamp=datetime.utcnow()
     )
@@ -1917,18 +2206,69 @@ async def slash_setchannel(interaction: discord.Interaction, type: app_commands.
     await interaction.response.send_message(embed=embed)
 
 
-@bot.command(name="setlog")
+@bot.command(name="setlevelup", aliases=["setlevelchannel"])
 @commands.has_permissions(administrator=True)
-async def prefix_setlog(ctx, channel: discord.TextChannel):
-    # Prefix ilə log kanalını təyin edirik
-    db.set_guild_setting(ctx.guild.id, "mod_log_channel", str(channel.id))
+async def prefix_setlevelup(ctx, channel: discord.TextChannel):
+    db.set_guild_setting(ctx.guild.id, "levelup_channel", str(channel.id))
     await send_success_card(
         ctx,
-        "Log Kanalı Təyin Edildi",
-        f"✅ Mod və Audit logları artıq {channel.mention} kanalına göndəriləcək."
+        "Level Bildiriş Kanalı Təyin Edildi",
+        f"✅ Səviyyə (Level-Up) bildirişləri artıq {channel.mention} kanalına göndəriləcək."
     )
 
 
+@bot.tree.command(name="settempvoice", description="TempVoice (Otaq Yarat) kanalını təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(channel="İstifadəçilər qoşulduqda şəxsi otaq yaradılacaq səs kanalı")
+async def slash_settempvoice(interaction: discord.Interaction, channel: discord.VoiceChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+    db.set_guild_setting(interaction.guild.id, "tempvoice_channel", str(channel.id))
+    embed = discord.Embed(
+        title="🔊 TempVoice Quraşdırıldı",
+        description=f"✅ **Otaq Yarat** kanalı təyin edildi: {channel.mention}\nİstifadəçilər bu kanala daxil olduqda onlar üçün avtomatik şəxsi otaq açılacaq.",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="setwelcome", description="Yeni üzvlər üçün vizual qarşılama kartı kanalını təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(channel="Xoşgəldin mesajlarının göndəriləcəyi mətn kanalı")
+async def slash_setwelcome(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+    db.set_guild_setting(interaction.guild.id, "welcome_channel", str(channel.id))
+    embed = discord.Embed(
+        title="👋 Xoşgəldin Kanalı Təyin Edildi",
+        description=f"✅ Yeni qoşulan üzvlər üçün vizual qarşılama kartı {channel.mention} kanalına göndəriləcək.",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="setautorole", description="Yeni üzvlərə avtomatik veriləcək rolu təyin edir.")
+@app_commands.checks.has_permissions(administrator=True)
+@app_commands.describe(role="Yeni qoşulan üzvlərə avtomatik veriləcək rol")
+async def slash_setautorole(interaction: discord.Interaction, role: discord.Role):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Bu əmr yalnız server daxilində işləyir.", ephemeral=True)
+        return
+    db.set_guild_setting(interaction.guild.id, "autorole", str(role.id))
+    embed = discord.Embed(
+        title="🎭 Auto-Role Təyin Edildi",
+        description=f"✅ Yeni qoşulan bütün üzvlərə avtomatik {role.mention} rolu veriləcək.",
+        color=0x57F287,
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"Quraşdıran: {interaction.user.display_name} • abi-bot")
+    await interaction.response.send_message(embed=embed)
 
 
 @bot.tree.command(name="komandalar", description="Botun bütün əmrlərinin siyahısını və bələdçisini göstərir.")
@@ -1944,17 +2284,32 @@ async def slash_komandalar(interaction: discord.Interaction):
 
     embed.add_field(
         name="🎙️ Səs & Aktivlik Statistikası",
-        value="• `/profil` — Səs aktivliyi və sıralama profili\n• `/top` — Ən çox səsdə qalanların lider cədvəli\n• `abi hesabat [gun/hefte/ay]` — Periodik hesabat",
+        value="• `/profil` — Səs aktivliyi və sıralama profili\n• `/top` — Ən çox səsdə qalanların lider cədvəli\n• `/qrafik` — Həftəlik səs aktivliyi diaqramı\n• `abi hesabat [gun/hefte/ay]` — Periodik hesabat",
         inline=False
     )
     embed.add_field(
         name="⭐ Səviyyə & XP Sistemi",
-        value="• `/seviyye` — Level, XP kartı və tərəqqi çubuğu\n• `/xptop` — Ən yüksək səviyyəli üzvlər",
+        value="• `/seviyye` — Vizual Rank kartı (Level, XP, Progress)\n• `/xptop` — Ən yüksək səviyyəli üzvlər",
+        inline=False
+    )
+    embed.add_field(
+        name="🔥 Seriya (Streak) Sistemi",
+        value="• `/streak` — Gündəlik səs aktivliyi seriyanız\n• `/streaktop` — Ən yüksək seriyaya sahib üzvlər",
+        inline=False
+    )
+    embed.add_field(
+        name="🔊 TempVoice (Şəxsi Otaq)",
+        value="• `abi ses ad / limit / kilid / ac / at / devret / lider` — Otaq idarəetməsi",
         inline=False
     )
     embed.add_field(
         name="🛡️ Moderasiya & Təhlükəsizlik",
         value="• `/kick` — Üzvü serverdən atır\n• `/ban` — Üzvü ban edir\n• `/mute` — Timeout verir\n• `/unmute` — Timeout-u qaldırır\n• `/sil` — Mesajları toplu silir\n• `abi warn` / `abi warnings` / `abi warnlar` — Xəbərdarlıq sistemi",
+        inline=False
+    )
+    embed.add_field(
+        name="⚙️ Admin Quraşdırma",
+        value="• `/settempvoice` — TempVoice kanalı təyin edir\n• `/setwelcome` — Xoşgəldin kartı kanalı\n• `/setautorole` — Avtomatik rol\n• `/setchannel` — Level bildiriş kanalı",
         inline=False
     )
     embed.add_field(

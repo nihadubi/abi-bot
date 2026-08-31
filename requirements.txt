@@ -1,4 +1,6 @@
 discord.py==2.4.0
 python-dotenv
 aiohttp
+pillow
+matplotlib
 audioop-lts; python_version >= "3.13"

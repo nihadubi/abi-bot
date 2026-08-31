@@ -5,20 +5,23 @@ A feature-rich Discord bot built with `discord.py` for voice activity tracking, 
 ## ✨ Features
 
 - 🎙️ Voice activity tracking (total/daily/weekly/monthly)
-- 📊 Leaderboards
-- ⭐ XP + level system for voice participation
+- 📊 Leaderboards & Həftəlik Səs Aktivliyi Qrafiki (Matplotlib)
+- ⭐ XP + level system with visual Rank Card (Pillow)
+- 🔥 Voice Streak (Gündəlik Səs Seriyası) — günlük bonus XP
+- 🚪 TempVoice — Join to Create şəxsi səs otaqları (ad, limit, kilid, kick, devret, lider)
+- 👋 Welcome Image & Auto-Role — vizual xoşgəldin kartı + avtomatik rol
 - 🛡️ Moderation commands (`warn`, `warnings`, `sil`, `mute`, `unmute`, `kick`, `ban`, `unban`)
-- 📜 Audit & Mod Log system (message delete/edit, voice events, moderation actions, member join/leave)
 - 🚫 Anti-link and anti-spam protection
 - 🧰 Utility commands (`userinfo`, `serverinfo`, `avatar`, `poll`)
-- 💾 SQLite persistence (`users`, `sessions`, `warnings`)
+- 💾 SQLite persistence (`users`, `sessions`, `warnings`, `temp_channels`, `guild_settings`)
 
 ## 📁 Project Structure
 
 ```text
 .
-├─ bot.py
-├─ database.py
+├─ bot.py          # Botun əsas faylı (komandalar, event-lər)
+├─ database.py     # SQLite verilənlər bazası əməliyyatları
+├─ graphics.py     # Pillow (Rank/Welcome kartları) & Matplotlib (Aktivlik qrafiki)
 ├─ requirements.txt
 ├─ .env
 ├─ .env.example
@@ -46,7 +49,6 @@ Create a `.env` file in the project root:
 TOKEN=your_discord_bot_token
 GUILD_ID=123456789012345678
 LEVEL_UP_CHANNEL_ID=123456789012345678
-MOD_LOG_CHANNEL_ID=123456789012345678
 ```
 
 ## 🚀 Run the Bot
@@ -67,17 +69,30 @@ https://your-render-service.onrender.com/privacy
 ## 🧪 Quick Check (Optional)
 
 ```bash
-python -m py_compile bot.py database.py
+python -m py_compile bot.py database.py graphics.py
 ```
 
 ## 🛠️ Main Commands
 
 ### Stats & XP
-- `abi profil [@user]`
-- `abi top [number]`
-- `abi hesabat [gun/hefte/ay]`
-- `abi seviyye [@user]`
-- `abi xptop [number]`
+- `abi profil [@user]` — Səs aktivliyi və sıralama profili
+- `abi top [number]` — Ən çox səsdə qalanların lider cədvəli
+- `abi qrafik [@user]` — Həftəlik səs aktivliyi diaqramı
+- `abi seviyye [@user]` — Vizual Rank kartı (Level, XP, Progress)
+- `abi xptop [number]` — XP lider cədvəli
+- `abi hesabat [gun/hefte/ay]` — Periodik səs hesabatı
+
+### Voice Streak (Seriya)
+- `abi streak [@user]` — Gündəlik səs seriyası
+- `abi streaktop [say]` — Ən yüksək seriyaya sahib üzvlər
+
+### TempVoice (Şəxsi Səs Otağı)
+- `abi ses ad [ad]` — Otağın adını dəyişir
+- `abi ses limit [say]` — İstifadəçi limiti (0 = limitsiz)
+- `abi ses kilid / ac` — Otağı kilidləyir / açır
+- `abi ses at @user` — İstifadəçini otaqdan atır
+- `abi ses devret @user` — Sahibliyi verir
+- `abi ses lider` — Otaq rəhbərliyini ələ alır
 
 ### Moderation
 - `abi warn @user [reason]`
@@ -90,14 +105,19 @@ python -m py_compile bot.py database.py
 - `abi ban @user [reason]`
 - `abi unban [userID] [reason]`
 
-### Utility
+### Admin Setup
+- `abi settempvoice #kanal` — TempVoice generator kanalını təyin edir
+- `abi setwelcome #kanal` — Xoşgəldin kartı kanalını təyin edir
+- `abi setautorole @rol` — Yeni üzvlərə avtomatik rol
+- `abi setlevelup #kanal` — Level-Up bildiriş kanalı
+
+### Utility & Help
 - `abi userinfo [@user]`
 - `abi serverinfo`
 - `abi avatar [@user]`
 - `abi poll Sual | Variant 1 | Variant 2 | ...`
-
-### Help
 - `abi komandalar`
+- `abi adminkomandalar [əmr]`
 
 ## 🔒 Security Notes
 

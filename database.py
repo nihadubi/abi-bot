@@ -62,6 +62,17 @@ class Database:
                     """
                 )
 
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS temp_channels (
+                        channel_id INTEGER PRIMARY KEY,
+                        guild_id INTEGER,
+                        owner_id INTEGER,
+                        created_at TEXT
+                    )
+                    """
+                )
+
                 # Mövcud bazada çatışmayan sütunları əlavə edirik
                 cursor.execute("PRAGMA table_info(users)")
                 existing_columns = {row[1] for row in cursor.fetchall()}
@@ -70,6 +81,12 @@ class Database:
                     cursor.execute("ALTER TABLE users ADD COLUMN xp INTEGER DEFAULT 0")
                 if "level" not in existing_columns:
                     cursor.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1")
+                if "streak" not in existing_columns:
+                    cursor.execute("ALTER TABLE users ADD COLUMN streak INTEGER DEFAULT 0")
+                if "last_streak_date" not in existing_columns:
+                    cursor.execute("ALTER TABLE users ADD COLUMN last_streak_date TEXT")
+                if "highest_streak" not in existing_columns:
+                    cursor.execute("ALTER TABLE users ADD COLUMN highest_streak INTEGER DEFAULT 0")
 
                 conn.commit()
         except Exception as error:
@@ -165,7 +182,16 @@ class Database:
                         (user_id, today, int(seconds)),
                     )
 
+                cursor.execute(
+                    "SELECT seconds FROM sessions WHERE user_id = ? AND date = ?",
+                    (user_id, today),
+                )
+                today_row = cursor.fetchone()
                 conn.commit()
+
+            # Əgər bu gün ən azı 15 dəqiqə (900 saniyə) səsdə olubsa, streak-i yeniləyirik
+            if today_row and today_row[0] >= 900:
+                self.update_streak(user_id)
         except Exception as error:
             print(f"[DB Xətası] Səs vaxtı əlavə olunmadı: {error}")
 
@@ -420,6 +446,23 @@ class Database:
             print(f"[DB Xətası] XP əlavə olunmadı: {error}")
             return 0, 1, False
 
+    def get_user_rank(self, user_id: int) -> int:
+        # İstifadəçinin XP-yə görə serverdəki sıralamasını (Rank #) qaytarır
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT xp FROM users WHERE user_id = ?", (user_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return 0
+                user_xp = row[0] or 0
+                cursor.execute("SELECT COUNT(*) FROM users WHERE xp > ?", (user_xp,))
+                higher_count = cursor.fetchone()[0]
+                return higher_count + 1
+        except Exception as error:
+            print(f"[DB Xətası] Rank alınmadı: {error}")
+            return 0
+
     def get_level_leaderboard(self, limit):
         # Səviyyə və XP-yə görə lider siyahısını qaytarırıq
         try:
@@ -548,7 +591,6 @@ class Database:
             print(f"[DB Xətası] Warn lider cədvəli alınmadı: {error}")
             return []
 
-    def delete_warning(self, warning_id):
         # ID üzrə xüsusi xəbərdarlığı silirik
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -572,3 +614,202 @@ class Database:
             print(f"[DB Xətası] Xəbərdarlıqlar təmizlənmədi: {error}")
             return 0
 
+    def update_streak(self, user_id: int):
+        """Gündəlik səs aktivliyinə görə streak-i yeniləyir.
+        Qaytarır: (current_streak: int, updated_today: bool, bonus_xp: int)
+        """
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT streak, last_streak_date, highest_streak, xp FROM users WHERE user_id = ?",
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+
+                if not row:
+                    return 0, False, 0
+
+                current_streak = row["streak"] or 0
+                last_date = row["last_streak_date"]
+                highest = row["highest_streak"] or 0
+
+                # Əgər bu gün artıq seriya sayılıbsa
+                if last_date == today:
+                    return current_streak, False, 0
+
+                # Əgər dünən səsdə olubsa, seriya davam edir
+                if last_date == yesterday:
+                    new_streak = current_streak + 1
+                else:
+                    # Əgər dünən səsdə olmayıbsa, seriya 1-dən yenidən başlayır
+                    new_streak = 1
+
+                new_highest = max(highest, new_streak)
+                # Seriya bonusu: hər gün üçün new_streak * 10 XP (maksimum 100 XP)
+                bonus_xp = min(new_streak * 10, 100)
+
+                cursor.execute(
+                    """
+                    UPDATE users
+                    SET streak = ?, last_streak_date = ?, highest_streak = ?, xp = xp + ?
+                    WHERE user_id = ?
+                    """,
+                    (new_streak, today, new_highest, bonus_xp, user_id),
+                )
+                conn.commit()
+                return new_streak, True, bonus_xp
+        except Exception as error:
+            print(f"[DB Xətası] Streak yenilənmədi: {error}")
+            return 0, False, 0
+
+    def get_streak(self, user_id: int):
+        """İstifadəçinin aktiv və ən yüksək streak məlumatını qaytarır."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT streak, last_streak_date, highest_streak FROM users WHERE user_id = ?",
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return {"streak": 0, "highest_streak": 0, "active_today": False}
+
+                last_date = row["last_streak_date"]
+                current_streak = row["streak"] or 0
+                highest = row["highest_streak"] or 0
+
+                # Əgər son aktivlik dünən və ya bu gün deyilsə, aktiv seriya sıfırlanmış sayılır
+                if last_date not in (today, yesterday):
+                    current_streak = 0
+
+                return {
+                    "streak": current_streak,
+                    "highest_streak": highest,
+                    "active_today": (last_date == today),
+                    "last_streak_date": last_date or "Qeyd olunmayıb",
+                }
+        except Exception as error:
+            print(f"[DB Xətası] Streak oxunmadı: {error}")
+            return {"streak": 0, "highest_streak": 0, "active_today": False}
+
+    def get_streak_leaderboard(self, limit: int = 10):
+        """Ən yüksək aktiv və rekord səs seriyasına sahib istifadəçilər."""
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT user_id, username, display_name,
+                           CASE WHEN last_streak_date IN (?, ?) THEN streak ELSE 0 END AS current_streak,
+                           highest_streak
+                    FROM users
+                    WHERE highest_streak > 0 OR streak > 0
+                    ORDER BY current_streak DESC, highest_streak DESC, total_seconds DESC
+                    LIMIT ?
+                    """,
+                    (today, yesterday, limit),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Streak lider cədvəli alınmadı: {error}")
+            return []
+
+    def get_user_daily_history(self, user_id: int, days: int = 7):
+        """İstifadəçinin son N günlük səs aktivliyini (saniyələrlə) qaytarır."""
+        start_date = (datetime.utcnow() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT date, seconds
+                    FROM sessions
+                    WHERE user_id = ? AND date >= ?
+                    ORDER BY date ASC
+                    """,
+                    (user_id, start_date),
+                )
+                data_dict = {row[0]: row[1] for row in cursor.fetchall()}
+
+            result = []
+            for i in range(days):
+                d = (datetime.utcnow() - timedelta(days=days - 1 - i))
+                date_str = d.strftime("%Y-%m-%d")
+                weekday_az = ["B.e", "Ç.a", "Ç", "C.a", "C", "Ş", "B"][d.weekday()]
+                result.append({
+                    "date": date_str,
+                    "day_label": f"{weekday_az}\n{d.strftime('%d.%m')}",
+                    "weekday": weekday_az,
+                    "seconds": data_dict.get(date_str, 0),
+                })
+            return result
+        except Exception as error:
+            print(f"[DB Xətası] Günlük statistika tarixi alınmadı: {error}")
+            return []
+
+    def add_temp_channel(self, channel_id: int, guild_id: int, owner_id: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute(
+                    """
+                    INSERT INTO temp_channels (channel_id, guild_id, owner_id, created_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(channel_id) DO UPDATE SET owner_id = excluded.owner_id
+                    """,
+                    (channel_id, guild_id, owner_id, now),
+                )
+                conn.commit()
+                return True
+        except Exception as error:
+            print(f"[DB Xətası] Temp kanal əlavə edilmədi: {error}")
+            return False
+
+    def get_temp_channel(self, channel_id: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM temp_channels WHERE channel_id = ?", (channel_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as error:
+            print(f"[DB Xətası] Temp kanal oxunmadı: {error}")
+            return None
+
+    def remove_temp_channel(self, channel_id: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM temp_channels WHERE channel_id = ?", (channel_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+        except Exception as error:
+            print(f"[DB Xətası] Temp kanal silinmədi: {error}")
+            return False
+
+    def get_guild_temp_channels(self, guild_id: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM temp_channels WHERE guild_id = ?", (guild_id,))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Server temp kanalları oxunmadı: {error}")
+            return []
