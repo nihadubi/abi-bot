@@ -110,8 +110,7 @@ python -m py_compile bot.py database.py graphics.py
 - `abi setwelcome #kanal` — Xoşgəldin kartı kanalını təyin edir
 - `abi setautorole @rol` — Yeni üzvlərə avtomatik rol
 - `abi setlevelup #kanal` — Level-Up bildiriş kanalı
-- `abi setupdatelog #kanal` — Update Log kanalı
-- `abi updatelog Başlıq | Dəyişikliklər...` — Yenilənmə elanı göndərir
+
 
 ### Utility & Help
 - `abi userinfo [@user]`
