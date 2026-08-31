@@ -8,7 +8,7 @@ from pathlib import Path
 
 import discord
 from aiohttp import web
-from discord import app_commands
+from discord import app_commands, ui
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -22,6 +22,9 @@ PREFIX = "abi "
 TOKEN = os.getenv("TOKEN")
 GUILD_ID = int(os.getenv("GUILD_ID", 0))
 LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
+TEMPVOICE_CHANNEL_ID = os.getenv("TEMPVOICE_CHANNEL_ID")
+WELCOME_CHANNEL_ID = os.getenv("WELCOME_CHANNEL_ID") or os.getenv("WELCOME_CHANNEL")
+AUTOROLE_ID = os.getenv("AUTOROLE_ID")
 BASE_DIR = Path(__file__).resolve().parent
 
 # Moderasiya və anti-spam ayarları
@@ -36,8 +39,8 @@ LEVEL_ROLE_REWARDS = {
     # 10: 234567890123456789,
 }
 
-XP_AWARD_COOLDOWN_SECONDS = 600
-XP_MIN_MEMBERS_IN_VOICE = 2
+XP_AWARD_COOLDOWN_SECONDS = 60
+XP_MIN_MEMBERS_IN_VOICE = int(os.getenv("XP_MIN_MEMBERS_IN_VOICE", "1"))
 
 
 intents = discord.Intents.default()
@@ -58,8 +61,9 @@ voice_sessions = {}
 # Mesaj spamını izləmək üçün istifadəçi vaxtlarını saxlayırıq
 spam_tracker = defaultdict(deque)
 
-# XP anti-farm üçün son mükafat vaxtını saxlayırıq
+# XP üçün vaxt qeydləri
 last_xp_award = {}
+last_msg_xp = {}
 
 BRAND_COLOR = 0x5865F2
 SUCCESS_COLOR = 0x57F287
@@ -214,8 +218,180 @@ def get_combined_totals():
     return sorted(combined.values(), key=lambda x: x["total_seconds"], reverse=True)
 
 
+# ==================== TEMPVOICE UI (MODALLAR VƏ DÜYMƏLƏR) ====================
+
+class RenameRoomModal(ui.Modal, title="Otağın Adını Dəyiş"):
+    new_name = ui.TextInput(
+        label="Yeni Otaq Adı",
+        placeholder="Məsələn: Söhbət Otağım",
+        max_length=32,
+        min_length=1,
+        required=True
+    )
+
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__()
+        self.channel = channel
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            val = self.new_name.value.strip()
+            await self.channel.edit(name=val)
+            await interaction.response.send_message(f"✅ Otağın adı **{val}** olaraq dəyişdirildi.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ad dəyişdirilə bilmədi: {e}", ephemeral=True)
+
+
+class RoomLimitModal(ui.Modal, title="İstifadəçi Limiti Təyin Et"):
+    limit_val = ui.TextInput(
+        label="Limit (0 = Limitsiz, Max = 99)",
+        placeholder="0-99 arası rəqəm yazın",
+        max_length=2,
+        min_length=1,
+        required=True
+    )
+
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__()
+        self.channel = channel
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            val = int(self.limit_val.value.strip())
+            val = max(0, min(val, 99))
+            await self.channel.edit(user_limit=val)
+            limit_str = f"**{val} nəfər**" if val > 0 else "**Limitsiz**"
+            await interaction.response.send_message(f"✅ Otağın limiti {limit_str} təyin edildi.", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("❌ Zəhmət olmasa yalnız rəqəm daxil edin (0-99).", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Limit dəyişdirilə bilmədi: {e}", ephemeral=True)
+
+
+class KickMemberSelect(ui.UserSelect):
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__(placeholder="Otaqdan atmaq istədiyiniz üzvü seçin...", min_values=1, max_values=1)
+        self.channel = channel
+
+    async def callback(self, interaction: discord.Interaction):
+        target = self.values[0]
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("❌ Özünüzü otaqdan ata bilməzsiniz.", ephemeral=True)
+            return
+
+        member = interaction.guild.get_member(target.id) if interaction.guild else None
+        if member and member.voice and member.voice.channel == self.channel:
+            try:
+                await member.move_to(None, reason="TempVoice: Otaq sahibi tərəfindən çıxarıldı")
+                await self.channel.set_permissions(member, connect=False)
+                await interaction.response.send_message(f"👢 {member.mention} otaqdan çıxarıldı və təkrar girişi bağlandı.", ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message(f"❌ İstifadəçini çıxarmaq olmadı: {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"❌ {target.mention} hazırda sizin otaqda deyil.", ephemeral=True)
+
+
+class KickMemberView(ui.View):
+    def __init__(self, channel: discord.VoiceChannel):
+        super().__init__(timeout=60)
+        self.add_item(KickMemberSelect(channel))
+
+
+class TempVoiceControlView(ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    def _get_target_channel(self, interaction: discord.Interaction) -> tuple[discord.VoiceChannel | None, dict | None, bool]:
+        if not interaction.user or not isinstance(interaction.user, discord.Member):
+            return None, None, False
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            return None, None, False
+
+        channel = interaction.user.voice.channel
+        temp_data = db.get_temp_channel(channel.id)
+        if not temp_data:
+            return None, None, False
+
+        is_owner = (temp_data["owner_id"] == interaction.user.id or interaction.user.guild_permissions.administrator)
+        return channel, temp_data, is_owner
+
+    @ui.button(label="Kilidlə / Aç", style=discord.ButtonStyle.primary, emoji="🔒", custom_id="tempvoice_toggle_lock")
+    async def toggle_lock(self, interaction: discord.Interaction, button: ui.Button):
+        channel, temp_data, is_owner = self._get_target_channel(interaction)
+        if not channel:
+            await interaction.response.send_message("❌ Hazırda heç bir şəxsi TempVoice otağında deyilsiniz.", ephemeral=True)
+            return
+        if not is_owner:
+            await interaction.response.send_message("❌ Bu əmri yalnız otaq sahibi istifadə edə bilər.", ephemeral=True)
+            return
+
+        current_perm = channel.overwrites_for(interaction.guild.default_role).connect
+        if current_perm is False:
+            await channel.set_permissions(interaction.guild.default_role, connect=True)
+            await interaction.response.send_message("🔓 Otağın kilidi açıldı! Hər kəs qoşula bilər.", ephemeral=True)
+        else:
+            await channel.set_permissions(interaction.guild.default_role, connect=False)
+            await interaction.response.send_message("🔒 Otaq kilidləndi! İcazəsiz heç kim qoşula bilməz.", ephemeral=True)
+
+    @ui.button(label="Ad Dəyiş", style=discord.ButtonStyle.secondary, emoji="✏️", custom_id="tempvoice_rename")
+    async def rename(self, interaction: discord.Interaction, button: ui.Button):
+        channel, temp_data, is_owner = self._get_target_channel(interaction)
+        if not channel:
+            await interaction.response.send_message("❌ Hazırda heç bir şəxsi TempVoice otağında deyilsiniz.", ephemeral=True)
+            return
+        if not is_owner:
+            await interaction.response.send_message("❌ Bu əmri yalnız otaq sahibi istifadə edə bilər.", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(RenameRoomModal(channel))
+
+    @ui.button(label="Limit Qoy", style=discord.ButtonStyle.secondary, emoji="👥", custom_id="tempvoice_limit")
+    async def set_limit(self, interaction: discord.Interaction, button: ui.Button):
+        channel, temp_data, is_owner = self._get_target_channel(interaction)
+        if not channel:
+            await interaction.response.send_message("❌ Hazırda heç bir şəxsi TempVoice otağında deyilsiniz.", ephemeral=True)
+            return
+        if not is_owner:
+            await interaction.response.send_message("❌ Bu əmri yalnız otaq sahibi istifadə edə bilər.", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(RoomLimitModal(channel))
+
+    @ui.button(label="İstifadəçi At", style=discord.ButtonStyle.danger, emoji="👢", custom_id="tempvoice_kick")
+    async def kick_member(self, interaction: discord.Interaction, button: ui.Button):
+        channel, temp_data, is_owner = self._get_target_channel(interaction)
+        if not channel:
+            await interaction.response.send_message("❌ Hazırda heç bir şəxsi TempVoice otağında deyilsiniz.", ephemeral=True)
+            return
+        if not is_owner:
+            await interaction.response.send_message("❌ Bu əmri yalnız otaq sahibi istifadə edə bilər.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Otaqdan çıxarmaq istədiyiniz üzvü seçin:", view=KickMemberView(channel), ephemeral=True)
+
+    @ui.button(label="Liderlik Al", style=discord.ButtonStyle.success, emoji="👑", custom_id="tempvoice_claim")
+    async def claim_ownership(self, interaction: discord.Interaction, button: ui.Button):
+        channel, temp_data, is_owner = self._get_target_channel(interaction)
+        if not channel:
+            await interaction.response.send_message("❌ Hazırda heç bir şəxsi TempVoice otağında deyilsiniz.", ephemeral=True)
+            return
+
+        owner_id = temp_data["owner_id"]
+        owner_present = any(m.id == owner_id for m in channel.members)
+        if owner_present and owner_id != interaction.user.id:
+            await interaction.response.send_message("❌ Otağın əsl sahibi hələ də kanaldadır.", ephemeral=True)
+            return
+
+        db.add_temp_channel(channel.id, interaction.guild.id, interaction.user.id)
+        await channel.set_permissions(interaction.user, manage_channels=True, move_members=True, mute_members=True, deafen_members=True)
+        await interaction.response.send_message(f"👑 Təbriklər, artıq bu otağın rəhbəri {interaction.user.mention}!", ephemeral=True)
+
+
 @bot.event
 async def on_ready():
+    # Bot açıldıqda View-ləri qeydiyyatdan keçiririk
+    bot.add_view(TempVoiceControlView())
+
     # Bot açıldıqda hazırda səsdə olanları aktiv sessiyaya əlavə edirik
     voice_sessions.clear()
 
@@ -248,8 +424,22 @@ async def on_ready():
     except Exception as e:
         logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
 
-    # Başlanğıcda boş qalmış köhnə temp kanalları təmizləyirik
+    # Başlanğıcda boş qalmış köhnə temp kanalları təmizləyirik və default ayarları yazırıq
     for guild in bot.guilds:
+        # Default environment ayarları serverə tətbiq olunur
+        if TEMPVOICE_CHANNEL_ID and str(TEMPVOICE_CHANNEL_ID) != "0":
+            if not db.get_guild_setting(guild.id, "tempvoice_channel"):
+                db.set_guild_setting(guild.id, "tempvoice_channel", str(TEMPVOICE_CHANNEL_ID))
+        if WELCOME_CHANNEL_ID and str(WELCOME_CHANNEL_ID) != "0":
+            if not db.get_guild_setting(guild.id, "welcome_channel"):
+                db.set_guild_setting(guild.id, "welcome_channel", str(WELCOME_CHANNEL_ID))
+        if AUTOROLE_ID and str(AUTOROLE_ID) != "0":
+            if not db.get_guild_setting(guild.id, "autorole"):
+                db.set_guild_setting(guild.id, "autorole", str(AUTOROLE_ID))
+        if LEVEL_UP_CHANNEL_ID and LEVEL_UP_CHANNEL_ID != 0:
+            if not db.get_guild_setting(guild.id, "levelup_channel"):
+                db.set_guild_setting(guild.id, "levelup_channel", str(LEVEL_UP_CHANNEL_ID))
+
         temp_list = db.get_guild_temp_channels(guild.id)
         for t in temp_list:
             chan = guild.get_channel(t["channel_id"])
@@ -285,7 +475,7 @@ async def on_voice_state_update(member, before, after):
 
     # 🚪 TempVoice Sistemi: "Otaq Yarat" kanalına qoşulma
     if after.channel is not None and (before.channel is None or before.channel.id != after.channel.id):
-        temp_master_id = db.get_guild_setting(member.guild.id, "tempvoice_channel")
+        temp_master_id = db.get_guild_setting(member.guild.id, "tempvoice_channel") or (TEMPVOICE_CHANNEL_ID if TEMPVOICE_CHANNEL_ID and str(TEMPVOICE_CHANNEL_ID) != "0" else None)
         if temp_master_id and str(after.channel.id) == str(temp_master_id):
             try:
                 category = after.channel.category
@@ -300,7 +490,7 @@ async def on_voice_state_update(member, before, after):
                     )
                 }
                 new_room = await member.guild.create_voice_channel(
-                    name=f"🔊・{member.display_name} otağı",
+                    name=f"{member.display_name} otağı",
                     category=category,
                     overwrites=overwrites,
                     user_limit=0,
@@ -309,24 +499,24 @@ async def on_voice_state_update(member, before, after):
                 db.add_temp_channel(new_room.id, member.guild.id, member.id)
                 await member.move_to(new_room)
 
-                # İstifadəçiyə otağı idarə etmək üçün DM və ya kanala bildiriş
+                # İstifadəçiyə otağı idarə etmək üçün düyməli idarəetmə paneli göndəririk
                 try:
                     embed = discord.Embed(
-                        title="🔊 Şəxsi Səs Otağınız Yaradıldı!",
+                        title="🎙️ Şəxsi Səs Otağınız Yaradıldı",
                         description=(
                             f"Xoş gəldiniz, {member.mention}!\n\n"
-                            "**Otağınızı idarə etmək üçün komandalar:**\n"
-                            "• `/voice name [ad]` və ya `abi ses ad [ad]` — Otağın adını dəyişir\n"
-                            "• `/voice limit [say]` və ya `abi ses limit [say]` — İstifadəçi limitini təyin edir\n"
-                            "• `/voice lock` və ya `abi ses kilid` — Otağı kilidləyir\n"
-                            "• `/voice unlock` və ya `abi ses ac` — Kilidi açır\n"
-                            "• `/voice kick @user` və ya `abi ses at @user` — Şəxsi otaqdan atır\n"
+                            "Aşağıdakı düymələrdən istifadə edərək səs otağınızı asanlıqla idarə edə bilərsiniz:\n"
+                            "• **🔒 Kilidlə / Aç** — Otağa giriş icazəsini bağlayır / açır\n"
+                            "• **✏️ Ad Dəyiş** — Otağın adını yeniləyir\n"
+                            "• **👥 Limit Qoy** — İstifadəçi sayına limit qoyur\n"
+                            "• **👢 İstifadəçi At** — İstenməyən şəxsi otaqdan çıxarır\n"
+                            "• **👑 Liderlik Al** — Əsl sahib çıxıbsa, otaq rəhbərliyini ələ alır\n"
                         ),
                         color=0x57F287,
                         timestamp=datetime.utcnow()
                     )
                     embed.set_footer(text="Otaqdakı hər kəs çıxdıqda kanal avtomatik silinəcək • abi-bot")
-                    await new_room.send(embed=embed)
+                    await new_room.send(embed=embed, view=TempVoiceControlView())
                 except Exception:
                     pass
             except Exception as err:
@@ -348,7 +538,7 @@ async def on_voice_state_update(member, before, after):
 @bot.event
 async def on_member_join(member: discord.Member):
     # 1. Auto-Role: Avtomatik rol təyin edilməsi
-    autorole_id = db.get_guild_setting(member.guild.id, "autorole")
+    autorole_id = db.get_guild_setting(member.guild.id, "autorole") or (AUTOROLE_ID if AUTOROLE_ID and str(AUTOROLE_ID) != "0" else None)
     if autorole_id:
         try:
             role = member.guild.get_role(int(autorole_id))
@@ -358,7 +548,7 @@ async def on_member_join(member: discord.Member):
             logger.warning(f"Auto-Role verilə bilmədi | user={member.id} role={autorole_id} err={err}")
 
     # 2. Welcome Image & Message: Gözəl vizual şəkillə qarşılama
-    welcome_chan_id = db.get_guild_setting(member.guild.id, "welcome_channel")
+    welcome_chan_id = db.get_guild_setting(member.guild.id, "welcome_channel") or (WELCOME_CHANNEL_ID if WELCOME_CHANNEL_ID and str(WELCOME_CHANNEL_ID) != "0" else None)
     if welcome_chan_id:
         try:
             chan = member.guild.get_channel(int(welcome_chan_id))
@@ -480,6 +670,34 @@ async def on_message(message: discord.Message):
         import random
         await message.reply(random.choice(caldir_replies))
         return
+
+    # Mətn kanalında mesaj yazdıqca XP verilməsi (hər 60 saniyədən bir 5-12 XP)
+    if message.guild and not message.content.startswith(PREFIX):
+        now = datetime.utcnow()
+        last_time = last_msg_xp.get(message.author.id)
+        if not last_time or (now - last_time).total_seconds() >= 60:
+            last_msg_xp[message.author.id] = now
+            import random
+            earned_xp = random.randint(5, 12)
+            db.upsert_user_identity(message.author.id, message.author.name, message.author.display_name)
+            new_xp, new_level, leveled_up = db.add_xp(message.author.id, earned_xp)
+            if leveled_up:
+                lvl_chan_id = db.get_guild_setting(message.guild.id, "levelup_channel") or (LEVEL_UP_CHANNEL_ID if LEVEL_UP_CHANNEL_ID != 0 else None)
+                if lvl_chan_id:
+                    try:
+                        lvl_chan = message.guild.get_channel(int(lvl_chan_id))
+                        if lvl_chan:
+                            embed = discord.Embed(
+                                title="🎉 Səviyyə Yüksəldi!",
+                                description=f"Təbriklər {message.author.mention}! Səviyyə **{new_level}** oldunuz! 🚀",
+                                color=0xFFD700,
+                                timestamp=datetime.utcnow()
+                            )
+                            embed.set_thumbnail(url=message.author.display_avatar.url)
+                            embed.set_footer(text="abi-bot Level Sistemi")
+                            await lvl_chan.send(embed=embed)
+                    except Exception:
+                        pass
 
     # Mövcud prefix komandalarının işləməsi üçün bunu mütləq çağırırıq
     await bot.process_commands(message)
@@ -1263,9 +1481,9 @@ def get_user_temp_channel(member: discord.Member) -> discord.VoiceChannel | None
 @bot.group(name="ses", invoke_without_command=True)
 async def ses_group(ctx):
     embed = discord.Embed(
-        title="🔊 TempVoice (Şəxsi Səs Otağı) İdarəetməsi",
+        title="🎙️ TempVoice (Şəxsi Səs Otağı) İdarəetmə Paneli",
         description=(
-            "Şəxsi səs otağınızda olarkən aşağıdakı əmrlərdən istifadə edə bilərsiniz:\n\n"
+            "Şəxsi səs otağınızı aşağıdakı **düymələr** və ya komandalarla idarə edə bilərsiniz:\n\n"
             "• `abi ses ad [yeni ad]` — Otağın adını dəyişir\n"
             "• `abi ses limit [say]` — Otağın istifadəçi limitini təyin edir (0 = limitsiz)\n"
             "• `abi ses kilid` — Otağı kilidləyir (başqalarının qoşulmasını bağlayır)\n"
@@ -1277,8 +1495,8 @@ async def ses_group(ctx):
         color=BRAND_COLOR,
         timestamp=datetime.utcnow()
     )
-    embed.set_footer(text="Nümunə: abi ses ad Oyun Otağım • abi-bot")
-    await ctx.send(embed=embed)
+    embed.set_footer(text="Düymələrdən istifadə edərək asanlıqla idarə edin • abi-bot")
+    await ctx.send(embed=embed, view=TempVoiceControlView())
 
 
 @ses_group.command(name="ad", aliases=["name"])
@@ -1288,8 +1506,8 @@ async def ses_ad(ctx, *, yeni_ad: str):
         await send_error_card(ctx, "İcazə Yoxdur", "Bu əmri istifadə etmək üçün özünüzə aid TempVoice səs otağında olmalısınız.")
         return
     yeni_ad = yeni_ad[:32]
-    await chan.edit(name=f"🔊・{yeni_ad}")
-    await send_success_card(ctx, "Otaq Adı Dəyişdirildi", f"✅ Otağın yeni adı: **🔊・{yeni_ad}**")
+    await chan.edit(name=yeni_ad)
+    await send_success_card(ctx, "Otaq Adı Dəyişdirildi", f"✅ Otağın yeni adı: **{yeni_ad}**")
 
 
 @ses_group.command(name="limit")
@@ -2322,78 +2540,61 @@ async def slash_komandalar(interaction: discord.Interaction):
 
 
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=1)
 async def xp_task():
-    # Hər 5 dəqiqədə səsdə olan istifadəçilərə XP veririk
-    for user_id in list(voice_sessions.keys()):
-        if not isinstance(user_id, int):
-            continue
+    # Hər 1 dəqiqədə səsdə olan istifadəçilərə vaxt və XP veririk
+    for guild in bot.guilds:
+        channels = list(guild.voice_channels) + list(getattr(guild, "stage_channels", []))
+        for channel in channels:
+            # AFK kanalını ötürürük
+            if guild.afk_channel and channel.id == guild.afk_channel.id:
+                continue
 
-        member = None
-        for guild in bot.guilds:
-            member = guild.get_member(user_id)
-            if member:
-                break
+            human_members = [m for m in channel.members if not m.bot]
+            if len(human_members) < XP_MIN_MEMBERS_IN_VOICE:
+                continue
 
-        if member is None or member.bot:
-            continue
-        if not member.voice or not member.voice.channel:
-            continue
+            for member in human_members:
+                # Səs vaxtını (60 saniyə) qeyd edirik
+                db.add_voice_time(member.id, member.name, member.display_name, 60)
+                db.upsert_user_identity(member.id, member.name, member.display_name)
+                voice_sessions[member.id] = datetime.utcnow()
 
-        # Aktiv sessiyanı periodik olaraq bazaya yazırıq. Bot yenidən başlasa,
-        # ən çox bu interval qədər səs vaxtı itə bilər.
-        started_at = voice_sessions.get(user_id)
-        if started_at:
-            elapsed_seconds = int((datetime.utcnow() - started_at).total_seconds())
-            if elapsed_seconds > 0:
-                db.add_voice_time(member.id, member.name, member.display_name, elapsed_seconds)
-                voice_sessions[user_id] = datetime.utcnow()
+                # Hər dəqiqə 5 XP veririk
+                new_xp, new_level, leveled_up = db.add_xp(member.id, 5)
 
-        # Anti-farm: kanalda minimum real istifadəçi sayı olmalıdır
-        human_members = [m for m in member.voice.channel.members if not m.bot]
-        if len(human_members) < XP_MIN_MEMBERS_IN_VOICE:
-            continue
+                if leveled_up:
+                    logger.info(f"Level artdı | user={member.id} level={new_level} xp={new_xp}")
 
-        # Anti-farm: cooldown dolmadan XP verilmir
-        now = datetime.utcnow()
-        last_award = last_xp_award.get(user_id)
-        if last_award and (now - last_award).total_seconds() < XP_AWARD_COOLDOWN_SECONDS:
-            continue
+                    # Level mükafat rolunu veririk (uyğun id varsa)
+                    if LEVEL_ROLE_REWARDS:
+                        eligible_levels = [lv for lv in LEVEL_ROLE_REWARDS.keys() if new_level >= lv]
+                        if eligible_levels:
+                            target_level = max(eligible_levels)
+                            role_id = LEVEL_ROLE_REWARDS.get(target_level)
+                            role = guild.get_role(role_id) if role_id else None
+                            if role and role not in member.roles:
+                                try:
+                                    await member.add_roles(role, reason=f"Level reward: {new_level}")
+                                except Exception as error:
+                                    logger.warning(f"Level rolu verilə bilmədi | user={member.id} role={role_id} err={error}")
 
-        db.upsert_user_identity(member.id, member.name, member.display_name)
-        new_xp, new_level, leveled_up = db.add_xp(user_id, 10)
-        last_xp_award[user_id] = now
-
-        if leveled_up:
-            logger.info(f"Level artdı | user={member.id} level={new_level} xp={new_xp}")
-
-            # Level mükafat rolunu veririk (uyğun id varsa)
-            if member.guild is not None and LEVEL_ROLE_REWARDS:
-                eligible_levels = [lv for lv in LEVEL_ROLE_REWARDS.keys() if new_level >= lv]
-                if eligible_levels:
-                    target_level = max(eligible_levels)
-                    role_id = LEVEL_ROLE_REWARDS.get(target_level)
-                    role = member.guild.get_role(role_id) if role_id else None
-                    if role and role not in member.roles:
+                    lvl_chan_id = db.get_guild_setting(guild.id, "levelup_channel") or (LEVEL_UP_CHANNEL_ID if LEVEL_UP_CHANNEL_ID != 0 else None)
+                    if lvl_chan_id:
                         try:
-                            await member.add_roles(role, reason=f"Level reward: {new_level}")
-                        except Exception as error:
-                            logger.warning(f"Level rolu verilə bilmədi | user={member.id} role={role_id} err={error}")
-
-            if member.guild:
-                lvl_chan_id = db.get_guild_setting(member.guild.id, "levelup_channel") or LEVEL_UP_CHANNEL_ID
-                if lvl_chan_id:
-                    try:
-                        lvl_chan = member.guild.get_channel(int(lvl_chan_id))
-                        if lvl_chan:
-                            embed = discord.Embed(
-                                title="🎉 Səviyyə Yüksəldi!",
-                                description=f"{member.mention} səviyyə **{new_level}**-ə çatdı!",
-                                color=0xFFD700,
-                            )
-                            await lvl_chan.send(embed=embed)
-                    except Exception:
-                        pass
+                            lvl_chan = guild.get_channel(int(lvl_chan_id))
+                            if lvl_chan:
+                                embed = discord.Embed(
+                                    title="🎉 Səviyyə Yüksəldi!",
+                                    description=f"Təbriklər {member.mention}! Səviyyə **{new_level}** oldunuz! 🚀",
+                                    color=0xFFD700,
+                                    timestamp=datetime.utcnow()
+                                )
+                                embed.set_thumbnail(url=member.display_avatar.url)
+                                embed.set_footer(text="abi-bot Level Sistemi")
+                                await lvl_chan.send(embed=embed)
+                        except Exception:
+                            pass
 
 
 @xp_task.before_loop
