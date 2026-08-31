@@ -81,6 +81,35 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 ytdl_sc = yt_dlp.YoutubeDL(YTDL_OPTIONS_SC)
 
 
+# ffmpeg executable və stream parametrləri
+def get_ffmpeg_executable() -> str:
+    """Sistemdə və ya imageio-ffmpeg paketində olan ffmpeg yolunu qaytarır."""
+    try:
+        import shutil
+        sys_ffmpeg = shutil.which("ffmpeg")
+        if sys_ffmpeg:
+            return sys_ffmpeg
+    except Exception:
+        pass
+
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+
+    return "ffmpeg"
+
+
+FFMPEG_EXECUTABLE = get_ffmpeg_executable()
+
+FFMPEG_OPTIONS = {
+    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+    "options": "-vn",
+}
+
+
+
 async def search_song_info(query: str, loop=None) -> dict:
     """
     Mahnını axtarır:
@@ -179,7 +208,8 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if not filename:
             raise Exception("Audio stream URL tapılmadı.")
 
-        return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data, volume=volume)
+        return cls(discord.FFmpegPCMAudio(filename, executable=FFMPEG_EXECUTABLE, **FFMPEG_OPTIONS), data=data, volume=volume)
+
 
 
 

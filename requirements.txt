@@ -5,5 +5,7 @@ pillow
 matplotlib
 PyNaCl
 yt-dlp
+imageio-ffmpeg
 audioop-lts; python_version >= "3.13"
+
 

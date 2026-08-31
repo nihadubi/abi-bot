@@ -30,16 +30,16 @@ UPDATE_LOG_CHANNEL_ID = os.getenv("UPDATE_LOG_CHANNEL_ID", "1544040943446003749"
 BASE_DIR = Path(__file__).resolve().parent
 
 # Bot versiyası və ən son yenilənmə jurnalı (Update Log)
-BOT_VERSION = "2.2.1"
+BOT_VERSION = "2.2.2"
 LATEST_CHANGELOG = {
-    "version": "v2.2.1",
-    "title": "🎵 Musiqi Sistemi Sabitləşdirməsi & Ağıllı Axın",
+    "version": "v2.2.2",
+    "title": "🎵 Musiqi & Sistem Təkmilləşdirmələri",
     "date": datetime.utcnow().strftime("%d.%m.%Y"),
     "changes": [
-        "**🛡️ YouTube Bot / DRM Bloklaması Həll Edildi**: Datacenter IP-lərinin bloklanmasının qarşısını almaq üçün mobil player müdafiəsi əlavə edildi.",
-        "**☁️ Avtomatik SoundCloud Fallback**: YouTube tərəfindən məhdudlaşdırılan mahnılar heç bir xəta vermədən avtomatik SoundCloud üzərindən tapılıb kəsintisiz oxudulur.",
-        "**⚙️ FFmpeg Paket Dəstəyi**: Render serverində audio axınının düzgün işləməsi üçün sistem paketləri təmin edildi.",
-        "**📢 Ağıllı Update Log**: Bot yenidən başladıqda eyni mesajın təkrar-təkrar atılması aradan qaldırıldı — yalnız real yeni versiyalarda bildiriş paylaşılır."
+        "**🎧 Musiqi Oxutma Xətası Həll Edildi**: FFmpeg axın tənzimləmələri və avtomatik binar inteqrasiyası tamamlandı.",
+        "**🛡️ YouTube / SoundCloud Bypass**: Datacenter IP bloklamaları aradan qaldırıldı, mahnılar kəsintisiz və yüksək keyfiyyətlə oxunur.",
+        "**📢 Avtomatik Update Log**: Yenilənmə jurnalı bu kanala birbaşa inteqrasiya edildi.",
+        "**🚪 TempVoice & Canlı XP**: Səs otaqlarında düyməli idarəetmə və dəqiqəlik XP qazanma aktivdir."
     ]
 }
 
@@ -459,17 +459,25 @@ async def on_ready():
         if log_channel_id:
             try:
                 update_chan = guild.get_channel(int(log_channel_id))
+                if update_chan is None:
+                    try:
+                        update_chan = await bot.fetch_channel(int(log_channel_id))
+                    except Exception as fe:
+                        logger.warning(f"Update log kanalı fetch edilə bilmədi ({log_channel_id}): {fe}")
+
                 if update_chan:
                     already_posted = False
-                    # Kanaldakı son 15 mesaja baxırıq - bu versiya artıq göndərilibsə təkrar göndərmirik
-                    async for msg in update_chan.history(limit=15):
-                        if msg.author == bot.user and msg.embeds:
-                            for emb in msg.embeds:
-                                if BOT_VERSION in (emb.title or "") or (emb.footer and BOT_VERSION in (emb.footer.text or "")):
-                                    already_posted = True
-                                    break
-                        if already_posted:
-                            break
+                    try:
+                        async for msg in update_chan.history(limit=15):
+                            if msg.author == bot.user and msg.embeds:
+                                for emb in msg.embeds:
+                                    if f"Versiya: {BOT_VERSION}" in (emb.footer.text if emb.footer else "") or f"({LATEST_CHANGELOG['version']})" in (emb.title or ""):
+                                        already_posted = True
+                                        break
+                            if already_posted:
+                                break
+                    except Exception as he:
+                        logger.warning(f"Kanal tarixçəsi oxuna bilmədi: {he}")
 
                     if not already_posted:
                         embed = discord.Embed(
@@ -480,9 +488,11 @@ async def on_ready():
                         )
                         embed.set_footer(text=f"Abi Bot Yenilənmə Sistemi • Versiya: {LATEST_CHANGELOG['version']} • {LATEST_CHANGELOG['date']}", icon_url=bot.user.display_avatar.url if bot.user else None)
                         await update_chan.send(embed=embed)
-                        logger.info(f"Update log {log_channel_id} kanalına göndərildi ({BOT_VERSION}).")
+                        logger.info(f"Update log {log_channel_id} kanalına uğurla göndərildi ({BOT_VERSION}).")
+                        print(f"✅ Update log {log_channel_id} kanalına uğurla göndərildi ({BOT_VERSION}).")
             except Exception as err:
                 logger.warning(f"Update log göndərilə bilmədi: {err}")
+                print(f"❌ Update log xətası: {err}")
 
         temp_list = db.get_guild_temp_channels(guild.id)
         for t in temp_list:
