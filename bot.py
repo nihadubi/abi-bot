@@ -25,6 +25,8 @@ LEVEL_UP_CHANNEL_ID = int(os.getenv("LEVEL_UP_CHANNEL_ID", 0))
 TEMPVOICE_CHANNEL_ID = os.getenv("TEMPVOICE_CHANNEL_ID", "1544037874226307152")
 WELCOME_CHANNEL_ID = os.getenv("WELCOME_CHANNEL_ID") or os.getenv("WELCOME_CHANNEL", "1467565789447196765")
 AUTOROLE_ID = os.getenv("AUTOROLE_ID", "1198359102968041615")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+AI_CHAT_HISTORY = defaultdict(lambda: deque(maxlen=10))  # Son 10 mesajı yadda saxlayır
 BASE_DIR = Path(__file__).resolve().parent
 
 # Moderasiya və anti-spam ayarları
@@ -217,6 +219,84 @@ def get_combined_totals():
             }
 
     return sorted(combined.values(), key=lambda x: x["total_seconds"], reverse=True)
+
+
+async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt: str) -> str:
+    """Google Gemini API vasitəsilə kontekstli və zəkili cavab hazırlayır."""
+    api_key = os.getenv("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+    if not api_key:
+        return (
+            "⚠️ **Süni İntellekt (Gemini API) açarı tapılmadı!**\n"
+            "Zəhmət olmasa `.env` faylına `GEMINI_API_KEY=sizin_açaranız` əlavə edin."
+        )
+
+    # Dialoq tarixçəsi
+    history = AI_CHAT_HISTORY[channel_or_user_id]
+
+    # Sistem təlimatı (Persona)
+    system_instruction = (
+        "Sən 'Abi' adlı mehriban, qardaşyana, ağıllı və hazırcavab Discord botusan. "
+        "Discord serverində üzvlərlə Azərbaycan dilində təbii, səmimi və aydın danışırsan. "
+        "İstifadəçilərə 'qardaşım', 'əziz dostum' və ya adları ilə müraciət edə bilərsən. "
+        "Cavablarını çox uzatmadan, Discord çatına uyğun, oxunaqlı və lazımi yerlərdə emoji ilə yaz."
+    )
+
+    contents = []
+    for role, text in history:
+        contents.append({"role": role, "parts": [{"text": text}]})
+
+    # Cari sualı əlavə edirik
+    current_user_text = f"[{user_name}]: {prompt}"
+    contents.append({"role": "user", "parts": [{"text": current_user_text}]})
+
+    payload = {
+        "contents": contents,
+        "systemInstruction": {
+            "parts": [{"text": system_instruction}]
+        },
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 1000
+        }
+    }
+
+    candidate_models = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"]
+    last_error_text = ""
+
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            for model_name in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                try:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            candidates = data.get("candidates", [])
+                            if not candidates:
+                                continue
+
+                            reply_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                            if not reply_text:
+                                continue
+
+                            # Tarixçəni yeniləyirik
+                            history.append(("user", current_user_text))
+                            history.append(("model", reply_text))
+                            return reply_text
+                        else:
+                            last_error_text = await resp.text()
+                            logger.warning(f"Gemini {model_name} failed ({resp.status}): {last_error_text}")
+                except asyncio.TimeoutError:
+                    continue
+                except Exception as inner_e:
+                    logger.warning(f"Gemini model {model_name} xətası: {inner_e}")
+                    continue
+
+            return f"❌ Süni İntellekt hazırda cavab verə bilmədi. Zəhmət olmasa bir qədər sonra yenidən yoxlayın."
+    except Exception as e:
+        logger.error(f"Gemini sorğusunda gözlənilməz xəta: {e}")
+        return f"❌ Cavab hazırlanarkən xəta yarandı: {e}"
 
 
 # ==================== TEMPVOICE UI (MODALLAR VƏ DÜYMƏLƏR) ====================
@@ -739,54 +819,76 @@ async def on_message(message: discord.Message):
         except Exception as error:
             logger.warning(f"on_message filtr xətası: {error}")
 
-    # İnteraktiv və mehriban mesaj cavabları
-    clean_text = message.content.strip().lower()
-    # Həm "ə", həm "e", hərf dəyişiklikləri və durğu işarələrini nəzərə alırıq
-    norm_text = clean_text.replace("ə", "e").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ğ", "g").replace("ç", "c").replace("ş", "s")
-    norm_text = re.sub(r"[?!.,/\\@#_~-]+", "", norm_text).strip()
+    # 🧠 SÜNİ İNTELLEKT (AI) VƏ İNTERAKTİV DİALOQ
+    # Bot etiketləndikdə (@abi-bot), bota reply verildikdə və ya 'abi ' ilə müraciət edildikdə
+    is_mentioned = bot.user and bot.user in message.mentions
+    is_reply_to_bot = False
+    if message.reference and message.reference.message_id:
+        try:
+            replied_msg = message.reference.resolved
+            if isinstance(replied_msg, discord.Message) and replied_msg.author.id == bot.user.id:
+                is_reply_to_bot = True
+        except Exception:
+            pass
 
-    # Xüsusi interaktiv dialoqlar
-    if norm_text in ["abi necesen", "abi necəsən", "abi netersen", "abi nətərsən", "abi keyfler nece", "abi keyflər necə"]:
-        replies = [
-            f"Sağ ol, {message.author.mention}! Bomba kimiyəm, sən necəsən? 😎",
-            f"Şükür yaxşılıqdır, {message.author.mention}! Sən nə var nə yox? 🎙️",
-            f"Serverin keşiyindəyəm, hər şey əladır! Sən necəsən? 🔥"
-        ]
-        import random
-        await message.reply(random.choice(replies))
-        return
+    starts_with_abi = clean_text.startswith("abi ") or clean_text == "abi"
 
-    if norm_text in ["abi salam", "salam abi", "selam abi", "abi selam"]:
-        await message.reply(f"Salam aleykum, {message.author.mention}! Xoş gördük 👋")
-        return
+    # Əgər birbaşa prefix komandasıdırsa (məs: 'abi ban', 'abi profil', 'abi top'), komandalara yönəlsin
+    # Amma komanda olmayan istənilən 'abi ...' müraciəti AI-a getsin!
+    words = clean_text.split()
+    is_prefix_cmd = False
+    if len(words) >= 2 and words[0] == "abi":
+        cmd_name = words[1]
+        if bot.get_command(cmd_name):
+            is_prefix_cmd = True
 
-    if norm_text == "abi zibzib":
-        await message.reply("https://www.youtube.com/watch?v=DBhs676nka4")
-        return
+    should_trigger_ai = (is_mentioned or is_reply_to_bot or (starts_with_abi and not is_prefix_cmd))
 
-    if norm_text in ["abi ne var ne yox", "abi nə var nə yox", "abi nava nox"]:
-        await message.reply("Hər şey qaydasındadır, səs kanallarına nəzarət edirəm! Səndə nə xəbər? 🎧")
-        return
+    if should_trigger_ai:
+        # Mesajdan bot mention-larını və 'abi' sözünü təmizləyib sual mətnini çıxarırıq
+        user_prompt = message.content
+        if bot.user:
+            user_prompt = user_prompt.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "")
+        # Əgər cümlə 'abi' ilə başlayırsa
+        clean_user_prompt = user_prompt.strip()
+        if clean_user_prompt.lower().startswith("abi"):
+            clean_user_prompt = clean_user_prompt[3:].strip()
+            if clean_user_prompt.startswith(",") or clean_user_prompt.startswith(":"):
+                clean_user_prompt = clean_user_prompt[1:].strip()
 
-    if norm_text in ["abi sag ol", "abi sağ ol", "abi cox sag ol", "abi çox sağ ol", "twk abi", "təsəkkür abi", "tesekkur abi"]:
-        await message.reply(f"Dəyməz, {message.author.mention}, hər zaman xidmətindəyəm! 🫡")
-        return
+        if not clean_user_prompt:
+            clean_user_prompt = "Salam!"
 
-    if norm_text in ["abi sevirsen meni", "abi məni sevirsən", "abi meni sevirsen"]:
-        await message.reply("Əlbəttə, sən bizim serverin ən dəyərli üzvüsən! ❤️")
-        return
+        # İstifadəçi xüsusi zarafatları veribsə əvvəlcə onlara baxa bilərik, yoxsa birbaşa Gemini AI cavab versin
+        if norm_text == "abi zibzib":
+            await message.reply("https://www.youtube.com/watch?v=DBhs676nka4")
+            return
+        if norm_text in [
+            "abi caldirir misin", "abi çaldırır mısın", "abi caldirirmisin", "abi çaldırırmısın",
+            "abi caldirirsiniz", "abi caldirirsan", "abi çaldırırsan", "caldirir misin abi"
+        ]:
+            caldir_replies = [
+                f"Çaldırmaq sakso deməkdir, {message.author.mention}... Nə saksosudur bu belə? 🤨🎷",
+                f"Ayıb olsun sənə {message.author.mention}, mən serverin abisiyəm, sən nə təklif edirsən? 😳",
+                f"Açığı çaldırmaq sakso deməkdir axı... Özünə gəl, {message.author.mention}! 😂🎷"
+            ]
+            import random
+            await message.reply(random.choice(caldir_replies))
+            return
 
-    if norm_text in [
-        "abi caldirir misin", "abi çaldırır mısın", "abi caldirirmisin", "abi çaldırırmısın",
-        "abi caldirirsiniz", "abi caldirirsan", "abi çaldırırsan", "caldirir misin abi"
-    ]:
-        caldir_replies = [
-            f"Çaldırmaq sakso deməkdir, {message.author.mention}... Nə saksosudur bu belə? 🤨🎷",
-            f"Ayıb olsun sənə {message.author.mention}, mən serverin abisiyəm, sən nə təklif edirsən? 😳",
-            f"Açığı çaldırmaq sakso deməkdir axı... Özünə gəl, {message.author.mention}! 😂🎷"
-        ]
-        import random
-        await message.reply(random.choice(caldir_replies))
+        # Gemini API ilə cavab hazırlayırıq
+        async with message.channel.typing():
+            context_id = message.channel.id if message.guild else message.author.id
+            author_name = message.author.display_name or message.author.name
+            ai_response = await generate_gemini_reply(context_id, author_name, clean_user_prompt)
+
+            # Discord-un 2000 simvol limitinə uyğunlaşdırırıq
+            if len(ai_response) > 1950:
+                chunks = [ai_response[i:i + 1950] for i in range(0, len(ai_response), 1950)]
+                for chunk in chunks:
+                    await message.reply(chunk)
+            else:
+                await message.reply(ai_response)
         return
 
     # Mətn kanalında mesaj yazdıqca XP verilməsi (hər 60 saniyədən bir 5-12 XP)
@@ -2649,12 +2751,35 @@ async def slash_komandalar(interaction: discord.Interaction):
         inline=False
     )
     embed.add_field(
+        name="🧠 Süni İntellekt (AI Söhbət)",
+        value="• Bota tag edərək (`@abi-bot`), reply edərək və ya `abi <sualınız>` yazaraq istənilən kanalda söhbət edin!\n• `/sorus <sual>` — Süni İntellektə birbaşa sual verin",
+        inline=False
+    )
+    embed.add_field(
         name="🧰 Köməkçi & Digər",
         value="• `/userinfo` — İstifadəçi haqqında məlumat\n• `/serverinfo` — Server statistikası\n• `/avatar` — Profil şəkli\n• `abi poll` — Sorğu\n• `abi sifirla` — Səs sıfırlama",
         inline=False
     )
     embed.set_footer(text="Developed for your server • abi-bot", icon_url=bot.user.display_avatar.url if bot.user else None)
     await interaction.response.send_message(embed=embed)
+
+
+@bot.tree.command(name="sorus", description="Süni İntellektə (Gemini AI) istənilən sualı verin.")
+@app_commands.describe(sual="Süni İntellektə verəcəyiniz sual və ya mövzu")
+async def slash_sorus(interaction: discord.Interaction, sual: str):
+    await interaction.response.defer(thinking=True)
+    author_name = interaction.user.display_name or interaction.user.name
+    context_id = interaction.channel_id if interaction.channel_id else interaction.user.id
+    reply_text = await generate_gemini_reply(context_id, author_name, sual)
+
+    if len(reply_text) > 1950:
+        chunks = [reply_text[i:i + 1950] for i in range(0, len(reply_text), 1950)]
+        await interaction.followup.send(chunks[0])
+        for chunk in chunks[1:]:
+            await interaction.channel.send(chunk)
+    else:
+        await interaction.followup.send(reply_text)
+
 
 
 

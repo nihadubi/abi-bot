@@ -111,6 +111,10 @@ python -m py_compile bot.py database.py graphics.py
 - `abi setautorole @rol` — Yeni üzvlərə avtomatik rol
 - `abi setlevelup #kanal` — Level-Up bildiriş kanalı
 
+### 🧠 Süni İntellekt (AI Chat)
+- Bota mention ataraq (`@abi-bot salam necəsən?`), cavab (reply) verərək və ya birbaşa `abi <sual>` yazaraq istənilən kanalda canlı söhbət
+- `/sorus <sual>` — Süni İntellektə Slash komandası ilə sual vermək
+- Dialoq konteksti və yaddaş sistemi
 
 ### Utility & Help
 - `abi userinfo [@user]`
