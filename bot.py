@@ -826,6 +826,11 @@ async def on_message(message: discord.Message):
         except Exception as error:
             logger.warning(f"on_message filtr xətası: {error}")
 
+    # İnteraktiv mətn emalı
+    clean_text = (message.content or "").strip().lower()
+    norm_text = clean_text.replace("ə", "e").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ğ", "g").replace("ç", "c").replace("ş", "s")
+    norm_text = re.sub(r"[?!.,/\\@#_~-]+", "", norm_text).strip()
+
     # 🧠 SÜNİ İNTELLEKT (AI) VƏ İNTERAKTİV DİALOQ
     # Bot etiketləndikdə (@abi-bot), bota reply verildikdə və ya 'abi ' ilə müraciət edildikdə
     is_mentioned = bot.user and bot.user in message.mentions
