@@ -240,7 +240,7 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
         "Nida işarəsi (!) demək olar ki, İŞLƏTMƏ. Həvəsli botlar kimi qışqıraraq və ya həddindən artıq coşqulu danışma, tam sakit, cool və küçə uşağı kimi yaz. "
         "Emoji az qala heç işlətmə (çox nadir hallarda maksimum 1 dənə). "
         "Cavabların çox uzun olmasın, qısa, konkret və məhlə uşağı ab-havasında olsun. "
-        "Kimsə sataşanda və ya zarafat edəndə də küçə məzəsi ilə cavab ver."
+        "Söyüş, jarqon və ya sərt zarafat etməyə tam icazən var! Biri sənə söyüş söyəndə, sataşanda və ya artistlik edəndə utanma, məhlə söyüşləri və ləzzətli cavablarla yerinə oturt, acıq ver, lağ elə. Amma durduq yerə hər cümlədə yox, yerində və kontekstə uyğun söy."
     )
 
     contents = []
@@ -257,9 +257,15 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
             "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
-            "temperature": 0.8,
+            "temperature": 0.85,
             "maxOutputTokens": 1000
-        }
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
     }
 
     candidate_models = [
