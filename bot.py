@@ -221,10 +221,87 @@ def get_combined_totals():
     return sorted(combined.values(), key=lambda x: x["total_seconds"], reverse=True)
 
 
+# ==================== SÜNİ İNTELLEKT, SÖYÜŞ VƏ İLİŞMƏ BAZASI ====================
+
+AGGRESSIVE_KEYWORDS = [
+    "sik", "sık", "göt", "got", "peyser", "peysər", "gijdillaq", "gijdıllax", "gijdillax",
+    "gijdıllaq", "qancıq", "qanciq", "qəhbə", "qehbe", "pox", "var-yox", "varyox", "var yox",
+    "anani", "ananı", "bacini", "bacını", "sülalə", "sulale", "köpək", "kopek", "bic", "biç",
+    "ogras", "oğraş", "səfeh", "sefeh", "şərəfsiz", "serefsiz", "dalina", "dalına", "ağzına",
+    "agzina", "tüpürüm", "tupurum", "sikdir", "yetim", "dalbayob", "blyat", "nahuy",
+    "pox yeyirsən", "pox yeyirsen", "artistlik eləmə", "artistlik eleme", "kimsən ala",
+    "kimsen ala", "kopeyoglu", "köpəyoğlu", "sənin boyuvu", "senin boyuvu", "ağzını cırım",
+    "agzini cirim", "səni söyərəm", "it balası", "it balasi", "cındır", "cindır", "cindir",
+    "qudurma", "qudurmusan", "söyüş", "söyüm", "soyum", "götveren", "gotveren", "amcıq", "amciq"
+]
+
+HEAVY_AZ_CURSES = [
+    "Ala sənin var-yoxunu elə bir günə qoyaram ki, kəfən də tapılmaz sənə, peysər! Kimə xoruzlanırsan ala sən gijdıllaq?!",
+    "Sənin o yekə ağzını sikim ki, durduq yerə gəlib mənə artistlik eləyirsən! İt balası, get əvvəlcə burnunu sil sonra mənimlə danış!",
+    "Ala sən kimsən axı mənimlə belə tonla danışırsan gijdıllax?! Sənin sülaləni bir-bir yerə döşəyərəm, ağlını başına yığ peysər oğlu peysər!",
+    "Sənin o murdar ağzına tüpürüm, ay yetimxana qaçqını. Get böyüyün gəlsin, sən hələ mənim söhbətimin çəkisi deyilsən!",
+    "Ala sikdir get burdan qanı xarab! Sənin kimiləri məhlədə şillə-təpiyin altına salıb axşama kimi qaçırdırdıq, indi gəlib mənə xoruzlanır!",
+    "Sənin varını-yoxunu, keçmişini gələcəyini elə bir fırladaram ki, özün də bilməzsən hardan girdin hardan çıxdın, gicbəsər cındır!",
+    "Ağzına pox qoyduğum, bura bax, bir də mənimlə bu tonda danışsan səni bu serverdə elə biabır eləyərəm ki, Discord-u silib qaçarsan!",
+    "Ala peysər, sənə söyüş söyməyə belə heyfim gəlir, amma sənin o gic ağzını cırmaq mənim boynumun borcudur!",
+    "Səni doğan mamaşa bilirdi səndən belə gijdıllaq çıxacaq? Yığışdır o artistliyini, yoxsa səni peysər eləyib buraxaram məhləyə!",
+    "Ala qudurmusan sən? Sənin o qulaqlarını kəsib verərəm itin qabağına, tula! Bir kəlmə də artıq-əskik danışsan səni darmadağın eləyərəm!",
+    "Sənin o şərəfsiz sifətini yerlə bir eləyərəm ala, get tullan burdan, yoxsa var-yoxunu bir yerdə yad eləyərəm!",
+    "Bura bax ala cındır, sənin boyuna-buxununa tüpürüm! Kiminlə nə cür danışdığını bil, yoxsa səni elə söyərəm ki, qohum-əqrəban utancından yerə girər!"
+]
+
+RANDOM_ILIS_QUOTES = [
+    "{mention} ala sən hələ də yaşayırsan? Çıx ortalığa görək nə hoqqalardan çıxırsan yetim 😂",
+    "{mention} qaqaş sənin bu serverdə nə iş gördüyünü bilən var ümumiyyətlə? Bir səsini çıxart görək nəçisən sən",
+    "{mention} profilinə baxdım, ürəyim sıxıldı ala, bir az özünə əl gəzdir bu nə gündür belə 🤦‍♂️",
+    "{mention} eşidirəm sağda-solda artistlik eləyirsən, ayağını yerə bas təkərin partlayar ha 😂",
+    "{mention} ala nəsə çox sakit durmusan bu aralar, xeyirdir başın daşamı dəyib?",
+    "{mention} qaqaş sən kimsən axı belə kənardan-kənardan baxırsan, gəl iki kəlmə söz de görək nə var nə yox",
+    "{mention} ala səninlə bir məsələni aydınlaşdırmalıyıq, gözüm üstündədir ha bax...",
+    "{mention} canınçün sənə bir dənə söyüş söyərdim e, amma hələ ki günahından keçirəm, adam ol 😂",
+    "{mention} ala bura bax, sən kənddə olanda da belə idin yoxsa şəhərə gələndən sonra bu günə qaldın?",
+    "{mention} yetim, axırıncı dəfə nə vaxt çimmisən? İyisi bura qədər gəlir e 🦨",
+    "{mention} qaqaş sənin danışığında bir əmma var e, axşam gəl söhbətə görək nə hoqqadır",
+    "{mention} ala bu serverdə hər kəs öz işindədir, bir tək sən havayı fırlanırsan buralarda",
+    "{mention} xoruzlanma ala elə, iki şilləlik canın var, gəl otur yerində dinməzcə",
+    "{mention} qaqaş səninlə təkbətək söhbətimiz var, özünü yığışdır yoxsa gəlib taparam səni!",
+    "{mention} sənin o baxışların xoşuma gəlmir e, bir az ciddi ol görək kiminlə söhbət eləyirsən!"
+]
+
+
+def check_is_aggressive(text: str) -> bool:
+    """İstifadəçi mətnində aqressiya, təhqir və ya söyüş olub-olmadığını yoxlayır."""
+    if not text:
+        return False
+    lower = text.lower().strip()
+    norm = lower.replace("ə", "e").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ğ", "g").replace("ç", "c").replace("ş", "s")
+    clean = re.sub(r'[^a-z0-9\s]', ' ', norm)
+    compressed = clean.replace(' ', '')
+    words = clean.split()
+
+    for kw in AGGRESSIVE_KEYWORDS:
+        kw_norm = kw.replace("ə", "e").replace("ı", "i").replace("ü", "u").replace("ö", "o").replace("ğ", "g").replace("ç", "c").replace("ş", "s")
+        kw_clean = re.sub(r'[^a-z0-9\s]', ' ', kw_norm)
+        kw_comp = kw_clean.replace(' ', '')
+
+        if kw_norm in words:
+            return True
+        if kw_comp and (kw_norm in clean or kw_comp in compressed):
+            return True
+        if re.search(r'\b' + re.escape(kw_norm), norm):
+            return True
+    return False
+
+
 async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt: str) -> str:
-    """Google Gemini API vasitəsilə kontekstli və zəkili cavab hazırlayır."""
+    """Google Gemini API vasitəsilə kontekstli, tənzimlənmiş və zəkili cavab hazırlayır."""
+    import random
+    is_aggressive = check_is_aggressive(prompt)
+
     api_key = os.getenv("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
     if not api_key:
+        if is_aggressive:
+            return random.choice(HEAVY_AZ_CURSES)
         return (
             "⚠️ **Süni İntellekt (Gemini API) açarı tapılmadı!**\n"
             "Zəhmət olmasa `.env` faylına `GEMINI_API_KEY=sizin_açaranız` əlavə edin."
@@ -235,20 +312,35 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
 
     # Sistem təlimatı (Persona)
     system_instruction = (
-        "Sən Discord serverindəki uşaqlarla bir yerdə böyümüş, küçə söhbətini, Bakı jarqonunu bilən 'Abi'sən. "
+        "Sən Discord serverindəki uşaqlarla bir yerdə böyümüş, Bakı küçə jarqonunu mükəmməl bilən 'Abi'sən. "
         "Əsla rəsmi, ədəbi və ya robot kimi danışma! Danışığın tam küçə/məhlə dilində, rahat, 'qaqaş', 'brat', 'ala', 'nətərsən', 'nə var nə yox', 'canınçün', 'bomba kimi' tərzində olsun. "
-        "Nida işarəsi (!) demək olar ki, İŞLƏTMƏ. Həvəsli botlar kimi qışqıraraq və ya həddindən artıq coşqulu danışma, tam sakit, cool və küçə uşağı kimi yaz. "
-        "Emoji az qala heç işlətmə (çox nadir hallarda maksimum 1 dənə). "
-        "Cavabların çox uzun olmasın, qısa, konkret və məhlə uşağı ab-havasında olsun. "
-        "Söyüş, jarqon və ya sərt zarafat etməyə tam icazən var! Biri sənə söyüş söyəndə, sataşanda və ya artistlik edəndə utanma, məhlə söyüşləri və ləzzətli cavablarla yerinə oturt, acıq ver, lağ elə. Amma durduq yerə hər cümlədə yox, yerində və kontekstə uyğun söy."
+        "Nida işarəsi demək olar ki, işlətmə. Emoji çox nadir hallarda (maksimum 1 dənə). Cavabların qısa, konkret və məhlə uşağı ab-havasında olsun.\n\n"
+        "ÇOX DƏQİQ VƏ VACİB DAVRANIŞ QAYDALARI:\n"
+        "1. NORMAL VƏ YA DOSTCASINA DANIŞIQ (STANDART HAL):\n"
+        "İstifadəçi sənə normal müraciət edəndə, salamlaşanda, hal-əhval tutanda, sual verəndə və ya zarafat edəndə TAM MEHRİBAN, SƏMİMİ, POZİTİV VƏ QARDAŞYANA OL! "
+        "ƏSLA DURDUQ YERƏ AQRESSİV OLMA, kobudluq eləmə, əsəbiləşmə, heç kimin qəlbinə dəymə və söyüş söymə! Məhlə qardaşı kimi səmimi cavab ver ('Salam aleykum qaqaş, şükür bomba kimiyəm, sən nətərsən?', 'Canınçün nə kömək lazımdır de', 'Buyur brat baş üstə').\n\n"
+        "2. AQRESSİV VƏ SÖYÜŞLÜ DANIŞIQ (YALNIZ VƏ YALNIZ İSTİFADƏÇİ AQRESSİV OLANDA):\n"
+        "Yalnız və yalnız istifadəçi sənə söyüş söyəndə, sataşanda, artistlik edəndə, hədələyəndə və ya tərbiyəsizlik edəndə bu rejimə keç! "
+        "Bu halda MƏRHƏMƏTSİZ OL! Heç bir ədəb filtri saxlama! ƏN GÜCLÜ, ƏN AĞIR, ƏN AMANSIZ Azərbaycan küçə söyüşləri və təhqirləri ilə (var-yox, peysər, gijdıllaq, sikdir, ağzına, dalına, it balası və s. ən sərt jarqonla) onun ağzının payını ver, yerinə oturt və lağ elə! Yumşaq söyüş yox, ən ağır söyüşləri birbaşa üzünə de!"
     )
 
     contents = []
     for role, text in history:
         contents.append({"role": role, "parts": [{"text": text}]})
 
-    # Cari sualı əlavə edirik
-    current_user_text = f"[{user_name}]: {prompt}"
+    # Cari sualı və kontekst təlimatını əlavə edirik
+    if is_aggressive:
+        situation_hint = (
+            "\n[DİQQƏT - VƏZİYYƏT: İstifadəçi sənə qarşı söyüş söydü və ya aqressivlik elədi! "
+            "DƏRHAL ən ağır, ən amansız, filtrlənməmiş Azərbaycan küçə söyüşləri və təhqirləri ilə onun ağzının payını ver, yerinə oturt! Heç bir söyüşdən çəkinmə!]"
+        )
+    else:
+        situation_hint = (
+            "\n[DİQQƏT - VƏZİYYƏT: İstifadəçi normal və səmimi danışır. "
+            "Çox mehriban, qardaşyana, səmimi küçə jarqonu ilə cavab ver. ƏSLA aqressiv olma, söyüş söymə, pozitiv və gülərüz ol.]"
+        )
+
+    current_user_text = f"[{user_name}]: {prompt}{situation_hint}"
     contents.append({"role": "user", "parts": [{"text": current_user_text}]})
 
     payload = {
@@ -257,7 +349,7 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
             "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
-            "temperature": 0.85,
+            "temperature": 0.9,
             "maxOutputTokens": 1000
         },
         "safetySettings": [
@@ -269,12 +361,10 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
     }
 
     candidate_models = [
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
         "gemini-3.1-flash-lite",
-        "gemini-3.7-flash",
-        "gemini-3.8-flash",
-        "gemini-2.5-flash-lite",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
     ]
     last_error_text = ""
 
@@ -284,7 +374,7 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
             for model_name in candidate_models:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
                 try:
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             candidates = data.get("candidates", [])
@@ -295,8 +385,8 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
                             if not reply_text:
                                 continue
 
-                            # Tarixçəni yeniləyirik
-                            history.append(("user", current_user_text))
+                            # Tarixçəni yeniləyirik (təmiz halda)
+                            history.append(("user", f"[{user_name}]: {prompt}"))
                             history.append(("model", reply_text))
                             return reply_text
                         else:
@@ -308,10 +398,71 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
                     logger.warning(f"Gemini model {model_name} xətası: {inner_e}")
                     continue
 
+            # Əgər aqressivlik aşkar edilibsə amma Gemini təhlükəsizlik və ya digər səbəbdən bloklayıbsa,
+            # bot əsla xəta vermir, birbaşa ən ağır Azərbaycan söyüşləri ilə cavab verir!
+            if is_aggressive:
+                curse_reply = random.choice(HEAVY_AZ_CURSES)
+                history.append(("user", f"[{user_name}]: {prompt}"))
+                history.append(("model", curse_reply))
+                return curse_reply
+
             return f"❌ Süni İntellekt hazırda cavab verə bilmədi. Zəhmət olmasa bir qədər sonra yenidən yoxlayın."
     except Exception as e:
         logger.error(f"Gemini sorğusunda gözlənilməz xəta: {e}")
+        if is_aggressive:
+            return random.choice(HEAVY_AZ_CURSES)
         return f"❌ Cavab hazırlanarkən xəta yarandı: {e}"
+
+
+async def generate_ilis_text(member: discord.Member) -> str:
+    """İstifadəçiyə zarafatla sataşmaq və ya ilişmək üçün mətn hazırlayır."""
+    import random
+    api_key = os.getenv("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
+
+    # 40% ehtimalla birbaşa hazır zarafatcıl bazadan seçirik ki, həm sürətli həm də zəmanətli olsun
+    if not api_key or random.random() < 0.4:
+        return random.choice(RANDOM_ILIS_QUOTES).format(mention=member.mention)
+
+    prompt = (
+        f"Server üzvünün adı: {member.display_name}. "
+        "Bu istifadəçiyə Discord kanalında durduq yerə məhlə stilində sataş, iliş, lağ elə və ya zarafatla söz at. "
+        "Mütləq Bakı küçə jarqonunda olsun ('qaqaş', 'yetim', 'ala', 'artistlik eləmə'). "
+        "Çox uzun olmasın, maksimum 1-2 cümlə, çox gülməli və ironik olsun. İstifadəçinin adını çəkmə, çünki mən onu birbaşa etiketləyəcəm."
+    )
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "systemInstruction": {
+            "parts": [{"text": "Sən Discord serverində uşaqlara durduq yerə ilişən, söz atan, məhlə zarafatları edən 'Abi'sən. Cavabların qısa, gülməli, zarafatcıl və Bakı jarqonunda olsun."}]
+        },
+        "generationConfig": {"temperature": 0.95, "maxOutputTokens": 150},
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            for model_name in ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                try:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                                if text:
+                                    return f"{member.mention} {text}"
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    return random.choice(RANDOM_ILIS_QUOTES).format(mention=member.mention)
 
 
 # ==================== TEMPVOICE UI (MODALLAR VƏ DÜYMƏLƏR) ====================
@@ -621,6 +772,9 @@ async def on_ready():
 
     if not xp_task.is_running():
         xp_task.start()
+
+    if not random_tag_roast_task.is_running():
+        random_tag_roast_task.start()
 
     try:
         if GUILD_ID:
@@ -2772,7 +2926,7 @@ async def slash_komandalar(interaction: discord.Interaction):
     )
     embed.add_field(
         name="🧠 Süni İntellekt (AI Söhbət)",
-        value="• Bota tag edərək (`@abi-bot`), reply edərək və ya `abi <sualınız>` yazaraq istənilən kanalda söhbət edin!\n• `/sorus <sual>` — Süni İntellektə birbaşa sual verin",
+        value="• Bota tag edərək (`@abi-bot`), reply edərək və ya `abi <sualınız>` yazaraq istənilən kanalda söhbət edin!\n• `/sorus <sual>` — Süni İntellektə birbaşa sual verin\n• `/ilis [istifadəçi]` və ya `abi ilis` — Kiməsə məhlə stilində sataşır/ilişir",
         inline=False
     )
     embed.add_field(
@@ -2864,6 +3018,97 @@ async def xp_task():
 async def before_xp_task():
     # XP döngüsü başlamadan öncə botun tam hazır olmasını gözləyirik
     await bot.wait_until_ready()
+
+
+@tasks.loop(minutes=40)
+async def random_tag_roast_task():
+    """Müəyyən fasilələrlə serverlərdə təsadüfi bir nəfəri etiketləyib ona ilişir."""
+    await bot.wait_until_ready()
+    import random
+    # Hər dövrdə 1 ilə 5 dəqiqə arası random gecikmə verir ki, dəqiq vaxt bilinməsin
+    await asyncio.sleep(random.randint(60, 300))
+
+    for guild in bot.guilds:
+        try:
+            # Əgər serverdə üzv azdırsa ötürürük
+            if guild.member_count is not None and guild.member_count <= 2:
+                continue
+
+            # Mətn kanalını seçirik
+            target_channel = None
+            for ch in guild.text_channels:
+                if ch.permissions_for(guild.me).send_messages:
+                    cname = ch.name.lower()
+                    if any(k in cname for k in ["sohbet", "sohbət", "chat", "general", "ümumi", "umumi", "esas", "əsas"]):
+                        target_channel = ch
+                        break
+
+            if not target_channel:
+                for ch in guild.text_channels:
+                    if ch.permissions_for(guild.me).send_messages:
+                        target_channel = ch
+                        break
+
+            if not target_channel:
+                continue
+
+            # Serverdəki insan üzvləri toplayırıq
+            human_members = [m for m in guild.members if not m.bot]
+            if not human_members:
+                continue
+
+            # Online / dnd / idle olanlara üstünlük veririk
+            active_members = [m for m in human_members if m.status != discord.Status.offline]
+            chosen_member = random.choice(active_members) if active_members else random.choice(human_members)
+
+            roast_msg = await generate_ilis_text(chosen_member)
+            await target_channel.send(roast_msg)
+            logger.info(f"Random ilişmə göndərildi: {guild.name} -> {chosen_member.display_name}")
+        except Exception as e:
+            logger.warning(f"random_tag_roast_task xətası ({guild.name}): {e}")
+
+
+@random_tag_roast_task.before_loop
+async def before_random_tag_roast_task():
+    await bot.wait_until_ready()
+
+
+@bot.command(name="ilis", aliases=["satas", "sozat"])
+async def cmd_ilis(ctx, target: discord.Member = None):
+    """Serverdə kiməsə və ya təsadüfi bir nəfərə məhlə stilində sataşır/ilişir."""
+    import random
+    if not target:
+        humans = [m for m in ctx.guild.members if not m.bot and m.id != ctx.author.id]
+        if humans:
+            active = [m for m in humans if m.status != discord.Status.offline]
+            target = random.choice(active) if active else random.choice(humans)
+        else:
+            target = ctx.author
+
+    roast = await generate_ilis_text(target)
+    await ctx.send(roast)
+
+
+@bot.tree.command(name="ilis", description="Serverdə kiməsə və ya təsadüfi bir nəfərə məhlə stilində ilişir/sataşır.")
+@app_commands.describe(istifadeci="İlişmək istədiyiniz şəxs (boş buraxsanız təsadüfi bir nəfər seçiləcək)")
+async def slash_ilis(interaction: discord.Interaction, istifadeci: discord.Member = None):
+    import random
+    await interaction.response.defer()
+    target = istifadeci
+    if not target and interaction.guild:
+        humans = [m for m in interaction.guild.members if not m.bot and m.id != interaction.user.id]
+        if humans:
+            active = [m for m in humans if m.status != discord.Status.offline]
+            target = random.choice(active) if active else random.choice(humans)
+        else:
+            target = interaction.user
+
+    if not target:
+        target = interaction.user
+
+    roast = await generate_ilis_text(target)
+    await interaction.followup.send(roast)
+
 
 
 async def handle_ping(request):
