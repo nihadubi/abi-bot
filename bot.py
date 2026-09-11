@@ -29,6 +29,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 AI_CHAT_HISTORY = defaultdict(lambda: deque(maxlen=10))  # Son 10 mesajı yadda saxlayır
 BASE_DIR = Path(__file__).resolve().parent
 
+# Bot sahibi — random ilişmə siyahısına düşmür, AI heç vaxt ona söyüş söyməz
+BOT_OWNER_USERNAMES = {"kitabxana", "nihad"}  # Discord username və ya display name
+
 # Moderasiya və anti-spam ayarları
 ANTI_SPAM_ENABLED = True
 SPAM_WINDOW_SECONDS = 8
@@ -298,6 +301,10 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
     import random
     is_aggressive = check_is_aggressive(prompt)
 
+    # Sahibə heç vaxt aqressiv olmuruq — kim nə deyirsə desin
+    if user_name and user_name.lower().strip() in BOT_OWNER_USERNAMES:
+        is_aggressive = False
+
     api_key = os.getenv("GEMINI_API_KEY", "").strip() or GEMINI_API_KEY
     if not api_key:
         if is_aggressive:
@@ -331,8 +338,11 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
     # Cari sualı və kontekst təlimatını əlavə edirik
     if is_aggressive:
         situation_hint = (
-            "\n[DİQQƏT - VƏZİYYƏT: İstifadəçi sənə qarşı söyüş söydü və ya aqressivlik elədi! "
-            "DƏRHAL ən ağır, ən amansız, filtrlənməmiş Azərbaycan küçə söyüşləri və təhqirləri ilə onun ağzının payını ver, yerinə oturt! Heç bir söyüşdən çəkinmə!]"
+            "\n[DİQQƏT - VƏZİYYƏT: İstifadəçi sənə qarşı söyüş söydü/aqressivlik elədi! "
+            "DƏRHAL ən ağır, ən amansız Azərbaycan küçə söyüşləri ilə ağzının payını ver! "
+            "ƏN VACİB QAYDA: Əvvəlki danışıqda nə demisənsə, HEÇ BİR SÖZU, HEÇ BİR İFADƏNİ TƏKRARLAMAQDAN ÇƏKIN! "
+            "Tamamilə fərqli söyüşlər, fərqli müqayisələr, fərqli ifadə tərzi icat et. "
+            "Öz-özünü klonlayan bir bot kimi görünmə, hər dəfə fərqli sür! Heç bir söyüşdən çəkinmə, maneəsiz ol!]"
         )
     else:
         situation_hint = (
@@ -349,7 +359,8 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
             "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
-            "temperature": 0.9,
+            # Aqressiv halda daha yüksək temperatur — daha çox kreativlik, az təkrar
+            "temperature": 1.1 if is_aggressive else 0.9,
             "maxOutputTokens": 1000
         },
         "safetySettings": [
@@ -398,10 +409,9 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
                     logger.warning(f"Gemini model {model_name} xətası: {inner_e}")
                     continue
 
-            # Əgər aqressivlik aşkar edilibsə amma Gemini təhlükəsizlik və ya digər səbəbdən bloklayıbsa,
-            # bot əsla xəta vermir, birbaşa ən ağır Azərbaycan söyüşləri ilə cavab verir!
+            # Bütün modellər uğursuz oldu — aqressiv halda AI-dan birbaşa söyüş sorğusu edirik
             if is_aggressive:
-                curse_reply = random.choice(HEAVY_AZ_CURSES)
+                curse_reply = await _generate_ai_curse(api_key)
                 history.append(("user", f"[{user_name}]: {prompt}"))
                 history.append(("model", curse_reply))
                 return curse_reply
@@ -410,8 +420,66 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
     except Exception as e:
         logger.error(f"Gemini sorğusunda gözlənilməz xəta: {e}")
         if is_aggressive:
-            return random.choice(HEAVY_AZ_CURSES)
+            return await _generate_ai_curse(api_key)
         return f"❌ Cavab hazırlanarkən xəta yarandı: {e}"
+
+
+
+async def _generate_ai_curse(api_key: str) -> str:
+    """Ana yoldan ayrı olaraq yalnız söyüş/təhqir generasiyası üçün Gemini-yə sorğu edir.
+    Hər dəfə fərqli, kreativ, AI-generated söyüş qaytarır. Yalnız tam uğursuzluqda fallback-ə keçir."""
+    import random
+    curse_themes = [
+        "peysər, gijdıllaq, var-yox, sülalə söyüşü",
+        "it balası, cındır, sikdir, ağzına, artistlik",
+        "yetimxana, tula, qulaq, şillə, məhlə",
+        "biabır, dalbayob, qanı xarab, qaçmaq, Discord",
+        "gicbəsər, murdar ağız, kəfən, xoruzlanmaq",
+    ]
+    theme = random.choice(curse_themes)
+    payload = {
+        "contents": [{
+            "role": "user",
+            "parts": [{"text": (
+                f"Sənə söyüş söydülər. Mövzu/açar sözlər: {theme}. "
+                "Bu mövzudakı söz kökləri əsasında tamamilə orijinal, kreativ, ən ağır Azərbaycan küçə söyüşü yaz. "
+                "Heç vaxt şablon/şablona bənzər ifadə işlətmə. 1-3 cümlə, birbaşa, amansız."
+            )}]
+        }],
+        "systemInstruction": {
+            "parts": [{"text": (
+                "Sən Bakı məhlə uşağısan. Ən ağır, ən amansız, tamamilə orijinal Azərbaycan küçə söyüşlərini "
+                "hər dəfə FƏRQLI şəkildə yaradırsan. Şablon yoxdur. Hər cavab unikal olmalıdır."
+            )}]
+        },
+        "generationConfig": {"temperature": 1.2, "maxOutputTokens": 200},
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            for model_name in ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                try:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            cands = data.get("candidates", [])
+                            if cands:
+                                txt = cands[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                                if txt:
+                                    return txt
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    # Yalnız həqiqətən hər şey uğursuz olsa — HEAVY_AZ_CURSES-dən seçirik
+    return random.choice(HEAVY_AZ_CURSES)
 
 
 async def generate_ilis_text(member: discord.Member) -> str:
@@ -3022,7 +3090,7 @@ async def before_xp_task():
 
 @tasks.loop(minutes=40)
 async def random_tag_roast_task():
-    """Müəyyən fasilələrlə serverlərdə təsadüfi bir nəfəri etiketləyib ona ilişir."""
+    """Yalnız 'dadaşşaqlar-chat' kanalında təsadüfi bir nəfəri etiketləyib ona ilişir."""
     await bot.wait_until_ready()
     import random
     # Hər dövrdə 1 ilə 5 dəqiqə arası random gecikmə verir ki, dəqiq vaxt bilinməsin
@@ -3030,30 +3098,30 @@ async def random_tag_roast_task():
 
     for guild in bot.guilds:
         try:
-            # Əgər serverdə üzv azdırsa ötürürük
-            if guild.member_count is not None and guild.member_count <= 2:
-                continue
-
-            # Mətn kanalını seçirik
+            # Yalnız "dadaşşaqlar-chat" kanalını hədəf alırıq
             target_channel = None
             for ch in guild.text_channels:
-                if ch.permissions_for(guild.me).send_messages:
-                    cname = ch.name.lower()
-                    if any(k in cname for k in ["sohbet", "sohbət", "chat", "general", "ümumi", "umumi", "esas", "əsas"]):
-                        target_channel = ch
-                        break
-
-            if not target_channel:
-                for ch in guild.text_channels:
+                # Kanalın adını normallaşdırıb yoxlayırıq
+                ch_name_norm = (
+                    ch.name.lower()
+                    .replace("ə", "e").replace("ş", "s").replace("ğ", "g")
+                    .replace("ı", "i").replace("ö", "o").replace("ü", "u")
+                    .replace("ç", "c")
+                )
+                if "dadasaqlar" in ch_name_norm and "chat" in ch_name_norm:
                     if ch.permissions_for(guild.me).send_messages:
                         target_channel = ch
                         break
 
             if not target_channel:
-                continue
+                continue  # Serverdə bu kanal yoxdursa ötürürük
 
-            # Serverdəki insan üzvləri toplayırıq
-            human_members = [m for m in guild.members if not m.bot]
+            # Serverdəki insan üzvləri toplayırıq (sahibi istisna edilir)
+            human_members = [
+                m for m in guild.members
+                if not m.bot and m.name.lower() not in BOT_OWNER_USERNAMES
+                and m.display_name.lower() not in BOT_OWNER_USERNAMES
+            ]
             if not human_members:
                 continue
 
@@ -3063,7 +3131,7 @@ async def random_tag_roast_task():
 
             roast_msg = await generate_ilis_text(chosen_member)
             await target_channel.send(roast_msg)
-            logger.info(f"Random ilişmə göndərildi: {guild.name} -> {chosen_member.display_name}")
+            logger.info(f"Random ilişmə göndərildi: {guild.name} #{target_channel.name} -> {chosen_member.display_name}")
         except Exception as e:
             logger.warning(f"random_tag_roast_task xətası ({guild.name}): {e}")
 
