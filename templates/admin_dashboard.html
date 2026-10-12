@@ -153,17 +153,31 @@
             />
           </div>
 
-          <!-- Description -->
+          <!-- Description with AI Generator -->
           <div>
-            <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
-              Təsvir (Description) <span class="text-gray-500 font-normal">(İstəyə bağlı)</span>
-            </label>
+            <div class="flex items-center justify-between mb-2">
+              <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-gray-300">
+                Təsvir (Description) <span class="text-gray-500 font-normal">(İstəyə bağlı)</span>
+              </label>
+              <button
+                type="button"
+                id="btnAiGenerate"
+                onclick="generateAiDescription()"
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-medium transition shadow-md shadow-purple-600/20 active:scale-95 cursor-pointer"
+                title="Şəkli analiz edərək Gemini AI ilə avtomatik ətraflı və estetik təsvir çıxarır"
+              >
+                <svg class="w-3.5 h-3.5 text-yellow-300" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                </svg>
+                <span id="btnAiGenerateText">Gemini AI ilə Təsvir Çıxar</span>
+              </button>
+            </div>
             <textarea
               id="postDescription"
               name="description"
-              rows="3"
-              placeholder="Postun mətni, təsviri və ya qeydlər..."
-              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+              rows="4"
+              placeholder="Postun mətni, təsviri və ya qeydlər (və ya 'Gemini AI ilə Təsvir Çıxar' düyməsinə klikləyin)..."
+              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition leading-relaxed"
               oninput="updateLivePreview()"
             ></textarea>
           </div>
@@ -198,21 +212,50 @@
               <label class="text-xs font-semibold uppercase tracking-wider text-gray-300">
                 Şəkillər (Fayl və ya URL)
               </label>
-              <span class="text-[11px] text-gray-400">Maksimum 10 şəkil</span>
+              <div class="flex items-center gap-2">
+                <span id="imageCounter" class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand/20 text-brand">0/10</span>
+                <span class="text-[11px] text-gray-400">Maksimum 10</span>
+              </div>
             </div>
 
-            <!-- Upload input -->
-            <div>
-              <label class="block text-xs text-gray-400 mb-1.5">Fayl Seçin (PNG, JPG, WEBP, GIF)</label>
+            <!-- Upload drop zone -->
+            <div
+              id="dropZone"
+              class="relative border-2 border-dashed border-borderDark hover:border-brand/60 rounded-xl p-5 text-center transition bg-cardBg cursor-pointer group"
+              onclick="document.getElementById('postFiles').click()"
+            >
               <input
                 type="file"
                 id="postFiles"
-                name="files"
                 multiple
-                accept=".png,.jpg,.jpeg,.webp,.gif"
-                class="block w-full text-xs text-gray-400 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-brand/20 file:text-brand hover:file:bg-brand/30 file:cursor-pointer cursor-pointer border border-borderDark rounded-xl p-1 bg-cardBg"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                class="hidden"
                 onchange="handleFileSelection(this)"
               />
+              <div class="flex flex-col items-center justify-center gap-2">
+                <div class="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center group-hover:scale-110 transition">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <span class="text-xs font-medium text-white group-hover:text-brand transition">Şəkil seçmək və ya sürükləyib atmaq üçün klikləyin</span>
+                  <p class="text-[11px] text-gray-400 mt-0.5">PNG, JPG, WEBP, GIF (Hər dəfə seçdikdə siyahıya əlavə olunur)</p>
+                </div>
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#161922] border border-borderDark text-[11px] text-gray-400 mt-1">
+                  <kbd class="px-1.5 py-0.5 text-[10px] font-semibold text-gray-300 bg-borderDark rounded">Ctrl</kbd> + <kbd class="px-1.5 py-0.5 text-[10px] font-semibold text-gray-300 bg-borderDark rounded">V</kbd>
+                  <span>ilə şəkil yapışdıra bilərsən</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Thumbnail Grid for Selected / Pasted Images -->
+            <div id="thumbnailContainer" class="hidden space-y-2">
+              <div class="flex items-center justify-between text-[11px] text-gray-400">
+                <span>Seçilmiş Şəkillər (<span id="thumbCount">0</span>) • Sürüşdürərək sıranı dəyişə bilərsiniz</span>
+                <button type="button" onclick="clearAllFiles()" class="text-red-400 hover:underline">Hamısını Sil</button>
+              </div>
+              <div id="thumbnailGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2.5"></div>
             </div>
 
             <div class="relative flex py-1 items-center">
@@ -230,10 +273,11 @@
                 rows="2"
                 placeholder="https://i.imgur.com/example1.jpg&#10;https://i.imgur.com/example2.png"
                 class="w-full px-3.5 py-2.5 bg-cardBg border border-borderDark rounded-xl text-white placeholder-gray-500 text-xs focus:ring-2 focus:ring-brand focus:outline-none transition"
-                oninput="updateLivePreview()"
+                oninput="handleUrlChange()"
               ></textarea>
             </div>
           </div>
+
 
           <!-- Scheduling (Optional) -->
           <div class="p-4 rounded-xl bg-[#111319] border border-borderDark space-y-2">
@@ -478,16 +522,225 @@
       }
     }
 
-    function handleFileSelection(input) {
-      selectedFilesCache = Array.from(input.files);
+    let uploadedFilesList = []; // Holds File objects in exact user order
+    let objectUrls = new Map(); // File -> blob URL
+    let pasteCounter = 1;
+
+    // Allowed image types
+    const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+
+    function getCombinedImageCount() {
+      const urlCount = getUrlList().length;
+      return uploadedFilesList.length + urlCount;
+    }
+
+    function getUrlList() {
+      const txt = document.getElementById("postImageUrls").value.trim();
+      return txt.split("\n").map(u => u.trim()).filter(Boolean);
+    }
+
+    function updateCounter() {
+      const total = getCombinedImageCount();
+      const counter = document.getElementById("imageCounter");
+      counter.innerText = `${total}/10`;
+      if (total >= 10) {
+        counter.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400";
+      } else {
+        counter.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-brand/20 text-brand";
+      }
+    }
+
+    function handleUrlChange() {
+      const total = getCombinedImageCount();
+      if (total > 10) {
+        showToast("Maksimum 10 şəkil limiti aşıldı! Artıq URL-ləri silin.", "error");
+      }
+      updateCounter();
       updateLivePreview();
     }
+
+    function addFilesToList(newFiles) {
+      let added = 0;
+      for (const file of newFiles) {
+        if (getCombinedImageCount() >= 10) {
+          showToast("Maksimum 10 şəkil limiti doldu! Digər şəkillər əlavə edilmədi.", "error");
+          break;
+        }
+
+        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+          // Check extension
+          const ext = file.name.split('.').pop().toLowerCase();
+          if (!['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
+            showToast(`'${file.name}' dəstəklənməyən fayl formatıdır.`, "error");
+            continue;
+          }
+        }
+
+        uploadedFilesList.push(file);
+        added++;
+      }
+
+      if (added > 0) {
+        renderThumbnails();
+        updateCounter();
+        updateLivePreview();
+      }
+    }
+
+    function handleFileSelection(input) {
+      if (input.files && input.files.length > 0) {
+        addFilesToList(Array.from(input.files));
+      }
+      input.value = ""; // Reset so same file can be selected again
+    }
+
+    function removeFile(index) {
+      const file = uploadedFilesList[index];
+      if (file && objectUrls.has(file)) {
+        URL.revokeObjectURL(objectUrls.get(file));
+        objectUrls.delete(file);
+      }
+      uploadedFilesList.splice(index, 1);
+      renderThumbnails();
+      updateCounter();
+      updateLivePreview();
+    }
+
+    function clearAllFiles() {
+      for (const [file, url] of objectUrls.entries()) {
+        URL.revokeObjectURL(url);
+      }
+      objectUrls.clear();
+      uploadedFilesList = [];
+      renderThumbnails();
+      updateCounter();
+      updateLivePreview();
+    }
+
+    function getFileUrl(file) {
+      if (!objectUrls.has(file)) {
+        objectUrls.set(file, URL.createObjectURL(file));
+      }
+      return objectUrls.get(file);
+    }
+
+    function renderThumbnails() {
+      const container = document.getElementById("thumbnailContainer");
+      const grid = document.getElementById("thumbnailGrid");
+      const thumbCount = document.getElementById("thumbCount");
+
+      if (uploadedFilesList.length === 0) {
+        container.classList.add("hidden");
+        grid.innerHTML = "";
+        return;
+      }
+
+      container.classList.remove("hidden");
+      thumbCount.innerText = uploadedFilesList.length;
+      grid.innerHTML = "";
+
+      uploadedFilesList.forEach((file, index) => {
+        const url = getFileUrl(file);
+        const card = document.createElement("div");
+        card.className = "relative group bg-cardBg border border-borderDark hover:border-brand/50 rounded-xl overflow-hidden aspect-square flex items-center justify-center cursor-move";
+        card.draggable = true;
+        card.dataset.index = index;
+
+        card.innerHTML = `
+          <img src="${url}" alt="${escapeHtml(file.name)}" class="w-full h-full object-cover pointer-events-none" />
+          <span class="absolute bottom-1 left-1 bg-black/70 text-[9px] text-gray-200 px-1 rounded truncate max-w-[80%]">${index + 1}. ${escapeHtml(file.name)}</span>
+          <button
+            type="button"
+            onclick="event.stopPropagation(); removeFile(${index})"
+            class="absolute top-1 right-1 w-5 h-5 bg-red-600/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs shadow transition active:scale-90"
+            title="Şəkli sil"
+          >&times;</button>
+        `;
+
+        // Drag & Drop reordering
+        card.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", index);
+          card.classList.add("opacity-50");
+        });
+        card.addEventListener("dragend", () => {
+          card.classList.remove("opacity-50");
+        });
+        card.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          card.classList.add("border-brand");
+        });
+        card.addEventListener("dragleave", () => {
+          card.classList.remove("border-brand");
+        });
+        card.addEventListener("drop", (e) => {
+          e.preventDefault();
+          card.classList.remove("border-brand");
+          const fromIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+          const toIndex = index;
+          if (!isNaN(fromIndex) && fromIndex !== toIndex) {
+            const movedItem = uploadedFilesList.splice(fromIndex, 1)[0];
+            uploadedFilesList.splice(toIndex, 0, movedItem);
+            renderThumbnails();
+            updateLivePreview();
+          }
+        });
+
+        grid.appendChild(card);
+      });
+    }
+
+    // Drag and Drop files onto dropZone
+    const dropZone = document.getElementById("dropZone");
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add("border-brand", "bg-brand/5");
+      });
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove("border-brand", "bg-brand/5");
+      });
+    });
+    dropZone.addEventListener("drop", (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        addFilesToList(Array.from(e.dataTransfer.files));
+      }
+    });
+
+    // Global Paste from Clipboard (Ctrl+V)
+    document.addEventListener("paste", (e) => {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      if (!items) return;
+
+      const pastedFiles = [];
+      for (const item of items) {
+        if (item.type && item.type.startsWith("image/")) {
+          const blob = item.getAsFile();
+          if (blob) {
+            const ext = blob.type.split("/")[1] || "png";
+            const newName = `pasted-${Date.now()}-${pasteCounter++}.${ext}`;
+            const file = new File([blob], newName, { type: blob.type });
+            pastedFiles.push(file);
+          }
+        }
+      }
+
+      if (pastedFiles.length > 0) {
+        e.preventDefault(); // Prevent only when image is pasted, text paste continues normally
+        addFilesToList(pastedFiles);
+        showToast(`${pastedFiles.length} ədəd şəkil buferdən (Ctrl+V) əlavə edildi!`, "success");
+      }
+    });
 
     function updateLivePreview() {
       const title = document.getElementById("postTitle").value.trim() || "Post Başlığı Burada Görünəcək";
       const desc = document.getElementById("postDescription").value.trim() || "Postun təsviri və mətni burada real vaxt rejimində əks olunacaq.";
       const link = document.getElementById("postLink").value.trim() || "#";
-      const imageUrls = document.getElementById("postImageUrls").value.trim().split("\n").map(u => u.trim()).filter(Boolean);
+      const imageUrls = getUrlList();
 
       document.getElementById("previewTitleLink").innerText = title;
       document.getElementById("previewTitleLink").href = link !== "#" ? link : "javascript:void(0)";
@@ -502,17 +755,12 @@
       const extraCount = document.getElementById("previewExtraCount");
       const extraCountNum = document.getElementById("extraCountNum");
 
-      let totalImages = selectedFilesCache.length + imageUrls.length;
+      let totalImages = uploadedFilesList.length + imageUrls.length;
 
-      if (selectedFilesCache.length > 0) {
-        const file = selectedFilesCache[0];
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          primaryImg.src = e.target.result;
-          primaryImg.classList.remove("hidden");
-          placeholderText.classList.add("hidden");
-        };
-        reader.readAsDataURL(file);
+      if (uploadedFilesList.length > 0) {
+        primaryImg.src = getFileUrl(uploadedFilesList[0]);
+        primaryImg.classList.remove("hidden");
+        placeholderText.classList.add("hidden");
       } else if (imageUrls.length > 0) {
         primaryImg.src = imageUrls[0];
         primaryImg.classList.remove("hidden");
@@ -531,16 +779,89 @@
       }
     }
 
+    // AI Description Generator via Gemini API
+    async function generateAiDescription() {
+      const btn = document.getElementById("btnAiGenerate");
+      const btnText = document.getElementById("btnAiGenerateText");
+      const descArea = document.getElementById("postDescription");
+      const imageUrls = getUrlList();
+
+      let targetFile = null;
+      let targetUrl = "";
+
+      if (uploadedFilesList.length > 0) {
+        targetFile = uploadedFilesList[0];
+      } else if (imageUrls.length > 0) {
+        targetUrl = imageUrls[0];
+      } else {
+        showToast("Zəhmət olmasa əvvəlcə bir şəkil seçin (və ya Ctrl+V ilə yapışdırın)!", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.classList.add("opacity-75", "cursor-wait");
+      btnText.innerText = "Gemini Analiz Edir...";
+
+      const formData = new FormData();
+      formData.append("csrf_token", globalCsrfToken);
+      if (targetFile) {
+        formData.append("file", targetFile, targetFile.name);
+      } else if (targetUrl) {
+        formData.append("image_url", targetUrl);
+      }
+
+      try {
+        const res = await fetch("/admin/api/generate-description", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success && data.description) {
+          descArea.value = data.description;
+          updateLivePreview();
+          showToast("Gemini AI təsviri uğurla çıxardı!", "success");
+        } else {
+          showToast(data.error || "Təsvir yaradılarkən xəta baş verdi.", "error");
+        }
+      } catch (err) {
+        showToast("Gemini API sorğusunda şəbəkə xətası baş verdi.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove("opacity-75", "cursor-wait");
+        btnText.innerText = "Gemini AI ilə Təsvir Çıxar";
+      }
+    }
+
     // Submit Post Form
     document.getElementById("postForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const submitBtn = document.getElementById("btnSubmitPost");
       const submitText = document.getElementById("btnSubmitText");
 
+      const totalImages = getCombinedImageCount();
+      if (totalImages > 10) {
+        showToast("Maksimum 10 şəkil icazəlidir! Artıq şəkilləri silin.", "error");
+        return;
+      }
+
       submitBtn.disabled = true;
       submitText.innerText = "Göndərilir...";
 
-      const formData = new FormData(document.getElementById("postForm"));
+      // Build FormData manually to ensure exact file order from uploadedFilesList
+      const formData = new FormData();
+      formData.append("csrf_token", globalCsrfToken);
+      formData.append("channel_id", document.getElementById("channelSelect").value);
+      formData.append("title", document.getElementById("postTitle").value.trim());
+      formData.append("description", document.getElementById("postDescription").value.trim());
+      formData.append("link_url", document.getElementById("postLink").value.trim());
+      formData.append("image_urls", document.getElementById("postImageUrls").value.trim());
+      formData.append("scheduled_time", document.getElementById("scheduledTime").value.trim());
+
+      // Append all selected files in exact order
+      for (const file of uploadedFilesList) {
+        formData.append("files", file, file.name);
+      }
 
       try {
         const res = await fetch("/admin/api/posts", {
@@ -556,9 +877,8 @@
           document.getElementById("postDescription").value = "";
           document.getElementById("postLink").value = "";
           document.getElementById("postImageUrls").value = "";
-          document.getElementById("postFiles").value = "";
           document.getElementById("scheduledTime").value = "";
-          selectedFilesCache = [];
+          clearAllFiles();
           updateLivePreview();
         } else {
           showToast(data.error || "Post göndərilərkən xəta baş verdi.", "error");
@@ -570,6 +890,7 @@
         submitText.innerText = "Postu Göndər";
       }
     });
+
 
     // History Functions
     async function loadHistory() {

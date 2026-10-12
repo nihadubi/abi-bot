@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import ipaddress
 import logging
@@ -141,7 +142,111 @@ async def safe_fetch_image_url(session: aiohttp.ClientSession, url: str) -> Tupl
         return None, None, f"Şəkil yüklənərkən xəta: {e}"
 
 
+# --- Gemini Vision Description Generator ---
+async def generate_image_description(image_bytes: bytes, mime_type: str = "image/jpeg") -> Tuple[Optional[str], Optional[str]]:
+    """Uses Gemini API to generate a detailed, aesthetic description of an image according to user guidelines."""
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None, "GEMINI_API_KEY təyin edilməyib (.env faylında yoxlayın)."
+
+    # Format supported MIME types for Gemini
+    supported_mimes = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    if mime_type not in supported_mimes:
+        mime_type = "image/jpeg"
+
+    # If image is very large (> 4MB), downscale slightly before sending to Gemini to save bandwidth/latency
+    try:
+        if len(image_bytes) > 3 * 1024 * 1024:
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                img.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=85)
+                image_bytes = buf.getvalue()
+                mime_type = "image/jpeg"
+    except Exception as e:
+        logger.warning(f"Gemini üçün şəkil ölçüsü kiçildilərkən xəta: {e}")
+
+    b64_data = base64.b64encode(image_bytes).decode("utf-8")
+
+    prompt_instruction = (
+        "Sən peşəkar, bədii və estetik vizual təsvirçisən. "
+        "Təqdim olunan şəkli aşağıdakı ciddi qaydalar əsasında təsvir et:\n"
+        "1. Şəkildəki əsas obyektləri, insanları (əgər qadın, kişi və ya hər hansı digər şəxs varsa: onların görünüşü, duruşu, geyimi, bədən quruluşu, fiziki xüsusiyyətləri, emosiyaları) detallı şəkildə təsvir et.\n"
+        "2. Əgər şəkildə NSFW (yaş məhdudiyyətli), estetik və ya bədən detalları (məsələn, geyimin növü, dekolte, bədən xətləri, çimərlik geyimi, xüsusi pozalar və s.) varsa, bunları senzurasız, lakin ədəbi, zövqlü və təsviri dillə qeyd et (çünki hədəf kanal 18+ / NSFW-dir).\n"
+        "3. Şəkilin fonunu, işıqlandırmasını, ümumi atmosferini və rənglərini təsvir et.\n"
+        "4. Mətni natural, axıcı və oxucunun diqqətini cəlb edəcək şəkildə Azərbaycan dilində yaz.\n"
+        "5. 'Bu şəkildə görünür ki...', 'Şəkildə təsvir olunur ki...' kimi süni girişlər etmə! Birbaşa canlı təsvirə başla.\n"
+        "6. Mətnin sonunda məzmuna və mövzuya tam uyğun bir neçə aktual hashtag (#) əlavə et.\n"
+        "7. Təsviri çox qısa etmə, dolğun və vizualı tam canlandıran bir abzas (və ya bir neçə bənd) olsun."
+    )
+
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "inlineData": {
+                            "mimeType": mime_type,
+                            "data": b64_data
+                        }
+                    },
+                    {
+                        "text": prompt_instruction
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.85,
+            "maxOutputTokens": 800
+        },
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+
+    candidate_models = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.5-flash-lite"
+    ]
+
+    last_error = ""
+    async with aiohttp.ClientSession() as session:
+        for model_name in candidate_models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            try:
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=25)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            desc_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                            if desc_text:
+                                return desc_text, None
+                    else:
+                        last_error = await resp.text()
+                        logger.warning(f"Gemini {model_name} vision error ({resp.status}): {last_error[:200]}")
+            except asyncio.TimeoutError:
+                last_error = "Gemini API cavab vermədi (Timeout)."
+                continue
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+    return None, f"Gemini təsvir yarada bilmədi: {last_error[:150]}"
+
+
 # --- Upload Limits & Image Compression ---
+
 def get_effective_max_upload_bytes(bot: discord.Client, channel: discord.TextChannel) -> int:
     """Calculates 90% effective maximum upload limit in bytes."""
     env_max_mb = os.getenv("MAX_UPLOAD_MB", "").strip()

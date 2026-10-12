@@ -20,6 +20,7 @@ from admin_helpers import (
     ALLOWED_IMAGE_EXTS,
     ALLOWED_MIME_TYPES,
     SESSION_MAX_AGE_SECONDS,
+    generate_image_description,
     get_client_ip,
     is_rate_limited,
     record_failed_login,
@@ -221,8 +222,8 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
                 image_urls_raw = (await part.text()).strip()
             elif name == "scheduled_time":
                 scheduled_time = (await part.text()).strip()
-            elif name in ("images", "files"):
-                filename = part.filename or "image.png"
+            elif name in ("images", "files", "file", "image") or part.filename:
+                filename = part.filename or f"image_{len(uploaded_files)+1}.png"
                 file_bytes = await part.read(decode=False)
                 if file_bytes:
                     uploaded_files.append((filename, file_bytes))
@@ -463,6 +464,63 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             db.update_scheduled_post_status(post_id, "failed", error_message=err_msg)
             return web.json_response({"success": False, "error": err_msg or "Post yenidən göndərilərkən xəta baş verdi."}, status=500)
 
+    # 11. API: Generate Image Description with Gemini
+    @require_auth
+    async def handle_api_generate_description(request: web.Request):
+        try:
+            reader = await request.multipart()
+        except Exception:
+            return web.json_response({"success": False, "error": "Sorğu oxunmadı."}, status=400)
+
+        csrf_token = ""
+        image_url = ""
+        uploaded_bytes = None
+        uploaded_mime = "image/jpeg"
+
+        while True:
+            part = await reader.next()
+            if part is None:
+                break
+            name = part.name
+            if name == "csrf_token":
+                csrf_token = (await part.text()).strip()
+            elif name == "image_url":
+                image_url = (await part.text()).strip()
+            elif name in ("file", "image", "files"):
+                fname = part.filename or "image.jpg"
+                uploaded_bytes = await part.read(decode=False)
+                ext = Path(fname).suffix.lower()
+                mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+                uploaded_mime = mime_map.get(ext, "image/jpeg")
+
+        if not verify_csrf(request, csrf_token):
+            return web.json_response({"success": False, "error": "CSRF təhlükəsizlik xətası."}, status=403)
+
+        target_bytes = uploaded_bytes
+        target_mime = uploaded_mime
+
+        if not target_bytes and image_url:
+            async with aiohttp.ClientSession() as fetch_sess:
+                bdata, fname, err = await safe_fetch_image_url(fetch_sess, image_url)
+                if err:
+                    return web.json_response({"success": False, "error": f"URL xətası: {err}"}, status=400)
+                target_bytes = bdata
+                ext = Path(fname or "").suffix.lower()
+                mime_map = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+                target_mime = mime_map.get(ext, "image/jpeg")
+
+        if not target_bytes:
+            return web.json_response({"success": False, "error": "Təsvir yaratmaq üçün zəhmət olmasa əvvəlcə bir şəkil faylı seçin və ya şəkil linki daxil edin."}, status=400)
+
+        desc, err = await generate_image_description(target_bytes, target_mime)
+        if err:
+            return web.json_response({"success": False, "error": err}, status=500)
+
+        return web.json_response({
+            "success": True,
+            "description": desc
+        })
+
     # Register Routes
     app.router.add_get("/admin/login", handle_login_page)
     app.router.add_post("/admin/login", handle_login_action)
@@ -476,4 +534,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     app.router.add_get("/admin/api/history", handle_api_history)
     app.router.add_post("/admin/api/delete", handle_api_delete_post)
     app.router.add_post("/admin/api/resend", handle_api_resend_post)
+    app.router.add_post("/admin/api/generate-description", handle_api_generate_description)
+
 
