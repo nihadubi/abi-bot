@@ -171,13 +171,19 @@ async def generate_image_description(image_bytes: bytes, mime_type: str = "image
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt_instruction = (
-        "MƏHDUDİYYƏTLƏR VƏ QAYDALAR:\n"
-        "1. Heç bir təsvir mətni, cümlə, salamlaşma və ya izahat YAZMA.\n"
-        "2. YALNIZ İNGİLİS DİLİNDƏ heşteqlər (hashtags) qaytar.\n"
-        "3. #woman, #girl, #female kimi ümumi cinsiyyət heşteqlərini YAZMA.\n"
-        "4. Yalnız bədən proporsiyalarına, bədən ölçülərinə, geyimə, pozaya və estetik xüsusiyyətlərə fokuslan.\n\n"
-        "Nümunə çıxış formatı:\n"
-        "#curvy #hourglass #slimwaist #thick #petite #fitbody #lingerie #cleavage #boudoir #sensual #aesthetic #nsfw"
+        "STRICT CONSTRAINTS:\n"
+        "1. Output ONLY lowercase English hashtags separated by spaces.\n"
+        "2. DO NOT include any sentences, intro/outro, or explanations.\n"
+        "3. FORBIDDEN: Do not use generic gender words (#woman, #girl) or emotional/aesthetic descriptors (#attractive, #sensual, #glamorous, #aesthetic, #beauty, #cute, #stunning, #sexy, #boudoir).\n"
+        "4. Do NOT use crude/slang anatomy terms. Use industry-standard fashion and physical shape terms instead.\n\n"
+        "APPROVED PHYSICAL TARGET TAGS (Select ONLY those that strictly apply to the visual):\n"
+        "- Curves & Voluptuousness: #curvy #voluptuous #hourglass #highlycurvy #fullfigured #plus-size #thick #shapely #hourglassfigure #curvaceous\n"
+        "- Upper Body / Chest: #busty #fullbust #generousbust #cleavage #deepcleavage #decollete #curvychest\n"
+        "- Lower Body / Hips: #widehips #curvyhips #curvylowerbody #thickthighs #booty #fullhips #heavyhips #curvesback #prominentcurves\n"
+        "- Midsection: #slimwaist #tinywaist #snatchedwaist #flatstomach #tonedmidriff\n"
+        "- Size & Build: #petite #fitphysique #fullerfigured #voluptuouscurves #thickset\n"
+        "- Attire: #lingerie #lacebra #panties #bikini #swimwear #bodysuit #closup\n\n"
+        "Output only the matched hashtags."
     )
 
 
