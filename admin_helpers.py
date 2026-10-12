@@ -171,16 +171,15 @@ async def generate_image_description(image_bytes: bytes, mime_type: str = "image
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt_instruction = (
-        "Sən peşəkar, bədii və estetik vizual təsvirçisən. "
-        "Təqdim olunan şəkli aşağıdakı ciddi qaydalar əsasında təsvir et:\n"
-        "1. Şəkildəki əsas obyektləri, insanları (əgər qadın, kişi və ya hər hansı digər şəxs varsa: onların görünüşü, duruşu, geyimi, bədən quruluşu, fiziki xüsusiyyətləri, emosiyaları) detallı şəkildə təsvir et.\n"
-        "2. Əgər şəkildə NSFW (yaş məhdudiyyətli), estetik və ya bədən detalları (məsələn, geyimin növü, dekolte, bədən xətləri, çimərlik geyimi, xüsusi pozalar və s.) varsa, bunları senzurasız, lakin ədəbi, zövqlü və təsviri dillə qeyd et (çünki hədəf kanal 18+ / NSFW-dir).\n"
-        "3. Şəkilin fonunu, işıqlandırmasını, ümumi atmosferini və rənglərini təsvir et.\n"
-        "4. Mətni natural, axıcı və oxucunun diqqətini cəlb edəcək şəkildə Azərbaycan dilində yaz.\n"
-        "5. 'Bu şəkildə görünür ki...', 'Şəkildə təsvir olunur ki...' kimi süni girişlər etmə! Birbaşa canlı təsvirə başla.\n"
-        "6. Mətnin sonunda məzmuna və mövzuya tam uyğun bir neçə aktual hashtag (#) əlavə et.\n"
-        "7. Təsviri çox qısa etmə, dolğun və vizualı tam canlandıran bir abzas (və ya bir neçə bənd) olsun."
+        "MƏHDUDİYYƏTLƏR VƏ QAYDALAR:\n"
+        "1. Heç bir təsvir mətni, cümlə, salamlaşma və ya izahat YAZMA.\n"
+        "2. YALNIZ İNGİLİS DİLİNDƏ heşteqlər (hashtags) qaytar.\n"
+        "3. #woman, #girl, #female kimi ümumi cinsiyyət heşteqlərini YAZMA.\n"
+        "4. Yalnız bədən proporsiyalarına, bədən ölçülərinə, geyimə, pozaya və estetik xüsusiyyətlərə fokuslan.\n\n"
+        "Nümunə çıxış formatı:\n"
+        "#curvy #hourglass #slimwaist #thick #petite #fitbody #lingerie #cleavage #boudoir #sensual #aesthetic #nsfw"
     )
+
 
     payload = {
         "contents": [
