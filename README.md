@@ -124,6 +124,48 @@ python -m py_compile bot.py database.py graphics.py
 - `abi komandalar`
 - `abi adminkomandalar [əmr]`
 
+## 🌐 Web Admin Paneli
+
+Bota daxil edilmiş veb idarəetmə paneli vasitəsilə NSFW (18+) mətn kanallarına müasir Discord Embed formatında şəkil və keçid linkləri olan postlar paylaşa, onları canlı önbaxışda (Live Preview) izləyə və planlaşdıra (Schedule) bilərsiniz.
+
+### Panel İmkanları
+- 🔒 **Təhlükəsiz Giriş**: Tək-admin şifrəli giriş (`ADMIN_PASSWORD`), Rate-limiting (5 səhv cəhddən sonra bloklanma), `HttpOnly` + `SameSite` sessiya kukiləri və CSRF qorunması.
+- 🔞 **Yalnız NSFW Kanallar**: Kanal siyahısı yalnız Discord-da `is_nsfw()` olan mətn kanallarını göstərir və arxa planda göndərilmə anında təkrar yoxlanılır.
+- 🖼️ **Çoxsaylı Şəkillər (10-dək)**: Həm fayl yükləmə (upload), həm də birbaşa URL ilə şəkil dəstəyi (PNG, JPG, WEBP, GIF). SSRF hücumlarına qarşı daxili IP/localhost filtri.
+- 📐 **Avtomatik Həcm & Sıxılma**: Discord serverinin real yükləmə limitinin 90%-i effektiv limit kimi qəbul edilir (`MAX_UPLOAD_MB` ilə tənzimlənə bilir). Şəkillər limiti aşdıqda Pillow ilə keyfiyyət və ölçü proporsional sıxılır.
+- 👁️ **Canlı Discord Önbaxışı**: Formu doldurarkən sağ tərəfdə mesajın Discord-da necə görünəcəyi canlı əks olunur.
+- 🕒 **Planlaşdırma (Scheduler)**: Post üçün vaxt təyin edildikdə SQLite bazasında saxlanılır və bot yenidən başlasa belə vaxtı çatanda avtomatik göndərilir.
+- 📜 **Tarixçə & Silmə**: Paylaşılan postlar tarixçədə saxlanılır; "Sil" düyməsi ilə həm bazadan, həm də Discord kanalından mesaj dərhal silinir.
+
+### Paneli İşə Salma & Giriş
+1. Botu işə saldıqdan sonra brauzerdə daxil olun:
+   ```
+   http://localhost:8080/admin
+   ```
+2. Giriş səhifəsində `.env` faylında təyin etdiyiniz `ADMIN_PASSWORD` şifrəsini yazın (defolt: `admin123`).
+
+### Təhlükəsiz Hostinq (Nginx Reverse Proxy & HTTPS)
+Admin panelini internet üzərindən təhlükəsiz idarə etmək üçün Nginx arxasında HTTPS (SSL) ilə işlətmək tövsiyə olunur:
+```nginx
+server {
+    server_name panel.domaininiz.com;
+
+    client_max_body_size 64M;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    listen 443 ssl;
+    # ssl_certificate /etc/letsencrypt/live/.../fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/.../privkey.pem;
+}
+```
+
 ## 🔒 Security Notes
 
 - Never commit real secrets in `.env`
@@ -133,3 +175,4 @@ python -m py_compile bot.py database.py graphics.py
 ## 📄 License
 
 Use, modify, and adapt for your own server needs.
+

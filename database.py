@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 
 class Database:
@@ -69,6 +70,37 @@ class Database:
                         guild_id INTEGER,
                         owner_id INTEGER,
                         created_at TEXT
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_posts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        description TEXT,
+                        link_url TEXT NOT NULL,
+                        channel_id INTEGER NOT NULL,
+                        channel_name TEXT,
+                        status TEXT DEFAULT 'sent', -- 'sent', 'scheduled', 'failed', 'deleted'
+                        discord_message_id TEXT,
+                        scheduled_time TEXT,
+                        created_at TEXT NOT NULL,
+                        error_message TEXT
+                    )
+                    """
+                )
+
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS post_images (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        post_id INTEGER NOT NULL,
+                        filename TEXT,
+                        image_url TEXT,
+                        image_bytes BLOB,
+                        FOREIGN KEY (post_id) REFERENCES admin_posts(id) ON DELETE CASCADE
                     )
                     """
                 )
@@ -813,3 +845,130 @@ class Database:
         except Exception as error:
             print(f"[DB Xətası] Server temp kanalları oxunmadı: {error}")
             return []
+
+    # ==================== ADMIN PANEL POST METODLARI ====================
+
+    def create_admin_post(self, title: str, description: Optional[str], link_url: str,
+                          channel_id: int, channel_name: str, status: str = "sent",
+                          discord_message_id: Optional[str] = None, scheduled_time: Optional[str] = None,
+                          error_message: Optional[str] = None, images: Optional[List[dict]] = None) -> int:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute(
+                    """
+                    INSERT INTO admin_posts (
+                        title, description, link_url, channel_id, channel_name,
+                        status, discord_message_id, scheduled_time, created_at, error_message
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (title, description, link_url, channel_id, channel_name,
+                     status, discord_message_id, scheduled_time, now, error_message)
+                )
+                post_id = cursor.lastrowid
+                if images:
+                    for img in images:
+                        cursor.execute(
+                            """
+                            INSERT INTO post_images (post_id, filename, image_url, image_bytes)
+                            VALUES (?, ?, ?, ?)
+                            """,
+                            (post_id, img.get("filename"), img.get("image_url"), img.get("image_bytes"))
+                        )
+                conn.commit()
+                return post_id
+        except Exception as error:
+            print(f"[DB Xətası] Admin post saxlanılmadı: {error}")
+            return 0
+
+    def get_admin_posts(self, limit: int = 50) -> List[dict]:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT * FROM admin_posts
+                    ORDER BY id DESC
+                    LIMIT ?
+                    """,
+                    (limit,)
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Admin postları oxunmadı: {error}")
+            return []
+
+    def get_admin_post(self, post_id: int) -> Optional[dict]:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM admin_posts WHERE id = ?", (post_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+        except Exception as error:
+            print(f"[DB Xətası] Admin post oxunmadı: {error}")
+            return None
+
+    def get_post_images(self, post_id: int) -> List[dict]:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, post_id, filename, image_url, image_bytes FROM post_images WHERE post_id = ?", (post_id,))
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Post şəkilləri oxunmadı: {error}")
+            return []
+
+    def update_scheduled_post_status(self, post_id: int, status: str, discord_message_id: Optional[str] = None, error_message: Optional[str] = None):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE admin_posts
+                    SET status = ?, discord_message_id = COALESCE(?, discord_message_id), error_message = ?
+                    WHERE id = ?
+                    """,
+                    (status, discord_message_id, error_message, post_id)
+                )
+                conn.commit()
+                return True
+        except Exception as error:
+            print(f"[DB Xətası] Post statusu yenilənmədi: {error}")
+            return False
+
+    def get_due_scheduled_posts(self) -> List[dict]:
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                now_iso = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute(
+                    """
+                    SELECT * FROM admin_posts
+                    WHERE status = 'scheduled' AND scheduled_time <= ?
+                    ORDER BY scheduled_time ASC
+                    """,
+                    (now_iso,)
+                )
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as error:
+            print(f"[DB Xətası] Vaxtı çatmış postlar oxunmadı: {error}")
+            return []
+
+    def delete_admin_post(self, post_id: int):
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM post_images WHERE post_id = ?", (post_id,))
+                cursor.execute("DELETE FROM admin_posts WHERE id = ?", (post_id,))
+                conn.commit()
+                return True
+        except Exception as error:
+            print(f"[DB Xətası] Post silinmədi: {error}")
+            return False
+

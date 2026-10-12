@@ -3173,22 +3173,40 @@ async def handle_privacy(request):
 
 
 async def start_web_server():
-    app = web.Application()
+    # Set client_max_size to 64MB so multiple high-res image uploads do not get blocked by aiohttp
+    app = web.Application(client_max_size=64 * 1024 * 1024)
     app.router.add_get("/", handle_ping)
     app.router.add_get("/ping", handle_ping)
     app.router.add_get("/terms", handle_terms)
     app.router.add_get("/privacy", handle_privacy)
+
+    # Admin Panel routes
+    try:
+        from admin_web import setup_admin_routes
+        setup_admin_routes(app, bot, db)
+        logger.info("Admin Panel marşrutları veb serverə inteqrasiya edildi (/admin).")
+    except Exception as e:
+        logger.error(f"Admin Panel qurularkən xəta: {e}", exc_info=True)
 
     port = int(os.getenv("PORT", 8080))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Keep-alive veb server port {port}-də başladı.")
+    logger.info(f"Veb server (Admin Panel daxil) port {port}-də başladı.")
 
 
 async def main():
     await start_web_server()
+
+    # Planlaşdırılmış postlar üçün arxa plan scheduler işçisi
+    try:
+        from admin_helpers import start_scheduler_worker
+        asyncio.create_task(start_scheduler_worker(bot, db))
+        logger.info("Planlaşdırılmış postlar üzrə arxa plan işçisi başladıldı.")
+    except Exception as e:
+        logger.error(f"Scheduler worker işə salınmadı: {e}")
+
     async with bot:
         await bot.start(TOKEN)
 
@@ -3198,4 +3216,5 @@ if __name__ == "__main__":
         logger.error("TOKEN tapılmadı! Zəhmət olmasa .env faylında TOKEN qeyd edin.")
     else:
         asyncio.run(main())
+
 

@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="az" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Abi Bot — Admin Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: '#5865F2',
+            brandHover: '#4752C4',
+            darkBg: '#0e1015',
+            cardBg: '#161922',
+            cardHeader: '#1e222e',
+            borderDark: '#282d3d',
+            discordDark: '#2b2d31',
+            discordEmbed: '#1e1f22',
+            discordBtn: '#4e5058'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #111319; }
+    ::-webkit-scrollbar-thumb { background: #282d3d; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3c435c; }
+  </style>
+</head>
+<body class="bg-darkBg text-gray-200 min-h-screen flex flex-col antialiased selection:bg-brand selection:text-white">
+
+  <!-- Header -->
+  <header class="bg-cardBg border-b border-borderDark sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shadow-md shadow-brand/20">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+          Abi Bot <span class="text-xs px-2 py-0.5 rounded-full bg-brand/20 text-brand font-medium">Web Admin</span>
+        </h1>
+        <p class="text-xs text-gray-400">Discord Embed Paylaşım və İdarəetmə Paneli</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Sistem Aktivdir
+      </div>
+      <a
+        href="/admin/logout"
+        class="flex items-center gap-1.5 text-xs font-medium text-gray-300 hover:text-white bg-cardHeader hover:bg-borderDark px-3.5 py-2 rounded-lg border border-borderDark transition"
+      >
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+        <span>Çıxış</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+
+    <!-- Tabs Navigation -->
+    <div class="flex border-b border-borderDark gap-4 text-sm font-medium">
+      <button id="tabBtnCreate" onclick="switchTab('create')" class="pb-3 text-brand border-b-2 border-brand flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Yeni Post Paylaş
+      </button>
+      <button id="tabBtnHistory" onclick="switchTab('history')" class="pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Paylaşım Tarixçəsi
+      </button>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toast" class="hidden fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 transition-all duration-300">
+      <div id="toastIcon"></div>
+      <div id="toastMessage" class="flex-1"></div>
+      <button onclick="hideToast()" class="text-gray-400 hover:text-white">&times;</button>
+    </div>
+
+    <!-- TAB 1: CREATE POST & LIVE PREVIEW -->
+    <div id="tabContentCreate" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+      <!-- Form Column -->
+      <div class="lg:col-span-7 bg-cardBg border border-borderDark rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📝 Post Formu</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-1">Daxil etdiyiniz məlumatlar avtomatik Discord Embed formatında paylanacaq.</p>
+        </div>
+
+        <form id="postForm" class="space-y-5" enctype="multipart/form-data">
+          <input type="hidden" id="csrfToken" name="csrf_token" value="" />
+
+          <!-- Channel Dropdown -->
+          <div>
+            <label for="channelSelect" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+              Hədəf Kanal (Yalnız NSFW / Yaş Məhdudiyyətli) <span class="text-red-400">*</span>
+            </label>
+            <div class="relative">
+              <select
+                id="channelSelect"
+                name="channel_id"
+                required
+                class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition appearance-none cursor-pointer"
+              >
+                <option value="">Kanal yüklənir...</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+              </svg>
+              Təhlükəsizlik qaydası: Yalnız Discord-da 18+ (NSFW) qeyd edilmiş kanallar dəstəklənir.
+            </p>
+          </div>
+
+          <!-- Title -->
+          <div>
+            <label for="postTitle" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+              Başlıq (Title) <span class="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              id="postTitle"
+              name="title"
+              required
+              placeholder="Məsələn: Eksklüziv Yenilik və ya Maraqlı Post"
+              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+              oninput="updateLivePreview()"
+            />
+          </div>
+
+          <!-- Description -->
+          <div>
+            <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+              Təsvir (Description) <span class="text-gray-500 font-normal">(İstəyə bağlı)</span>
+            </label>
+            <textarea
+              id="postDescription"
+              name="description"
+              rows="3"
+              placeholder="Postun mətni, təsviri və ya qeydlər..."
+              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+              oninput="updateLivePreview()"
+            ></textarea>
+          </div>
+
+          <!-- Link URL -->
+          <div>
+            <label for="postLink" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+              Keçid Linki (Link URL) <span class="text-red-400">*</span>
+            </label>
+            <div class="relative">
+              <input
+                type="url"
+                id="postLink"
+                name="link_url"
+                required
+                placeholder="https://example.com/post/123"
+                class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition pl-10"
+                oninput="updateLivePreview()"
+              />
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">Bu link Discord mesajında "Open" düyməsi kimi göstəriləcək.</p>
+          </div>
+
+          <!-- Images Section (Upload OR URL) -->
+          <div class="p-4 rounded-xl bg-[#111319] border border-borderDark space-y-4">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold uppercase tracking-wider text-gray-300">
+                Şəkillər (Fayl və ya URL)
+              </label>
+              <span class="text-[11px] text-gray-400">Maksimum 10 şəkil</span>
+            </div>
+
+            <!-- Upload input -->
+            <div>
+              <label class="block text-xs text-gray-400 mb-1.5">Fayl Seçin (PNG, JPG, WEBP, GIF)</label>
+              <input
+                type="file"
+                id="postFiles"
+                name="files"
+                multiple
+                accept=".png,.jpg,.jpeg,.webp,.gif"
+                class="block w-full text-xs text-gray-400 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-brand/20 file:text-brand hover:file:bg-brand/30 file:cursor-pointer cursor-pointer border border-borderDark rounded-xl p-1 bg-cardBg"
+                onchange="handleFileSelection(this)"
+              />
+            </div>
+
+            <div class="relative flex py-1 items-center">
+              <div class="flex-grow border-t border-borderDark"></div>
+              <span class="flex-shrink mx-3 text-gray-500 text-[11px] uppercase tracking-wider">VƏ YA URL İLƏ ƏLAVƏ ET</span>
+              <div class="flex-grow border-t border-borderDark"></div>
+            </div>
+
+            <!-- URL textarea -->
+            <div>
+              <label for="postImageUrls" class="block text-xs text-gray-400 mb-1.5">Şəkil Linkləri (Hər sətirdə 1 URL)</label>
+              <textarea
+                id="postImageUrls"
+                name="image_urls"
+                rows="2"
+                placeholder="https://i.imgur.com/example1.jpg&#10;https://i.imgur.com/example2.png"
+                class="w-full px-3.5 py-2.5 bg-cardBg border border-borderDark rounded-xl text-white placeholder-gray-500 text-xs focus:ring-2 focus:ring-brand focus:outline-none transition"
+                oninput="updateLivePreview()"
+              ></textarea>
+            </div>
+          </div>
+
+          <!-- Scheduling (Optional) -->
+          <div class="p-4 rounded-xl bg-[#111319] border border-borderDark space-y-2">
+            <div class="flex items-center justify-between">
+              <label for="scheduledTime" class="text-xs font-semibold uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Planlaşdırma (İstəyə bağlı)
+              </label>
+              <button
+                type="button"
+                onclick="document.getElementById('scheduledTime').value = ''"
+                class="text-[11px] text-gray-400 hover:text-red-400 transition"
+              >
+                Təmizlə
+              </button>
+            </div>
+            <input
+              type="datetime-local"
+              id="scheduledTime"
+              name="scheduled_time"
+              class="w-full px-3.5 py-2.5 bg-cardBg border border-borderDark rounded-xl text-white text-xs focus:ring-2 focus:ring-brand focus:outline-none transition"
+            />
+            <p class="text-[11px] text-gray-400">Boş saxlasanız, post dərhal göndəriləcək. Vaxt seçsəniz, bot həmin vaxt avtomatik paylaşacaq (server sönsə belə yadda qalır).</p>
+          </div>
+
+          <!-- Submit Button -->
+          <button
+            type="submit"
+            id="btnSubmitPost"
+            class="w-full py-4 px-6 bg-brand hover:bg-brandHover active:scale-[0.99] text-white font-semibold rounded-xl transition shadow-lg shadow-brand/25 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+            <span id="btnSubmitText">Postu Göndər</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Live Preview Column -->
+      <div class="lg:col-span-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>👁️ Canlı Discord Görünüşü</span>
+          </h2>
+          <span class="text-xs px-2.5 py-1 rounded-full bg-borderDark text-gray-300">Live Preview</span>
+        </div>
+
+        <!-- Discord App Container Simulation -->
+        <div class="bg-discordDark border border-borderDark/80 rounded-2xl p-5 shadow-2xl space-y-3 font-sans">
+          <!-- Bot author info in Discord -->
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm">
+              AB
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-semibold text-white text-sm">Abi Bot</span>
+                <span class="text-[10px] bg-brand text-white font-bold px-1 rounded">BOT</span>
+              </div>
+              <span class="text-[11px] text-gray-400">Bu gün saat 12:00</span>
+            </div>
+          </div>
+
+          <!-- Embed Box -->
+          <div class="border-l-4 border-brand bg-discordEmbed rounded-r-xl p-4 space-y-3 shadow-md max-w-full overflow-hidden">
+            <!-- Embed Title & Link -->
+            <a
+              id="previewTitleLink"
+              href="#"
+              target="_blank"
+              class="block text-base font-bold text-brand hover:underline break-words"
+            >
+              Post Başlığı Burada Görünəcək
+            </a>
+
+            <!-- Embed Description -->
+            <p id="previewDescription" class="text-xs text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+              Postun təsviri və mətni burada real vaxt rejimində əks olunacaq.
+            </p>
+
+            <!-- Embed Image Gallery Preview -->
+            <div id="previewImageGallery" class="space-y-2">
+              <div class="w-full aspect-video bg-[#111214] rounded-lg border border-borderDark flex items-center justify-center text-gray-500 text-xs overflow-hidden">
+                <img id="previewPrimaryImg" src="" alt="Preview" class="hidden w-full h-full object-cover" />
+                <span id="previewPlaceholderText">🖼️ Şəkil seçildikdə burada görünəcək</span>
+              </div>
+              <div id="previewExtraCount" class="hidden text-[11px] text-gray-400 text-right">
+                + <span id="extraCountNum">0</span> əlavə şəkil qalereya kimi göndəriləcək
+              </div>
+            </div>
+
+            <!-- Embed Footer -->
+            <div class="flex items-center gap-2 text-[10px] text-gray-400 border-t border-white/5 pt-2">
+              <span>Abi Bot Admin Panel</span>
+              <span>•</span>
+              <span id="previewTimestamp">Canlı Vaxt</span>
+            </div>
+          </div>
+
+          <!-- Link Button Simulation -->
+          <div class="pt-1">
+            <a
+              id="previewButton"
+              href="#"
+              target="_blank"
+              class="inline-flex items-center gap-1.5 px-4 py-2 bg-discordBtn hover:bg-[#5d6069] text-white text-xs font-semibold rounded transition shadow-sm"
+            >
+              <span>Open</span>
+              <svg class="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+              </svg>
+            </a>
+          </div>
+        </div>
+
+        <div class="bg-cardBg border border-borderDark rounded-xl p-4 text-xs text-gray-400 space-y-1.5">
+          <div class="font-semibold text-gray-300 flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Avtomatik Həcm və Sıxılma Qaydası:
+          </div>
+          <p>Şəkillərin ümumi həcmi server limitini (90% effektiv hədd) aşdıqda Pillow avtomatik olaraq ölçüləri və keyfiyyəti proporsional tənzimləyir və lazım olduqda şəkilləri paketlərə bölərək göndərir.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: POST HISTORY -->
+    <div id="tabContentHistory" class="hidden space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-bold text-white">📜 Paylaşım Tarixçəsi</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Son göndərilmiş və ya planlaşdırılmış postların siyahısı</p>
+        </div>
+        <button
+          onclick="loadHistory()"
+          class="flex items-center gap-1.5 text-xs bg-cardBg hover:bg-borderDark px-3.5 py-2 rounded-xl border border-borderDark transition text-gray-200 cursor-pointer"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Yenilə
+        </button>
+      </div>
+
+      <!-- History Table / Cards -->
+      <div class="bg-cardBg border border-borderDark rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-cardHeader border-b border-borderDark text-gray-400 uppercase tracking-wider">
+              <tr>
+                <th class="px-5 py-3.5">ID & Tarix</th>
+                <th class="px-5 py-3.5">Başlıq & Link</th>
+                <th class="px-5 py-3.5">Kanal</th>
+                <th class="px-5 py-3.5">Status</th>
+                <th class="px-5 py-3.5">Şəkil Sayı</th>
+                <th class="px-5 py-3.5 text-right">Əməliyyatlar</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-borderDark/60">
+              <tr>
+                <td colspan="6" class="px-5 py-8 text-center text-gray-500">
+                  Məlumatlar yüklənir...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    let globalCsrfToken = "";
+    let selectedFilesCache = [];
+
+    // Initialize Page
+    document.addEventListener("DOMContentLoaded", async () => {
+      await fetchSessionInfo();
+      await fetchChannels();
+      updateLivePreview();
+    });
+
+    async function fetchSessionInfo() {
+      try {
+        const res = await fetch("/admin/api/session");
+        if (res.status === 401) {
+          window.location.href = "/admin/login";
+          return;
+        }
+        const data = await res.json();
+        if (data.success && data.csrf_token) {
+          globalCsrfToken = data.csrf_token;
+          document.getElementById("csrfToken").value = data.csrf_token;
+        }
+      } catch (err) {
+        console.error("Session info error:", err);
+      }
+    }
+
+    async function fetchChannels() {
+      const select = document.getElementById("channelSelect");
+      try {
+        const res = await fetch("/admin/api/channels");
+        const data = await res.json();
+        if (data.success && data.channels) {
+          if (data.channels.length === 0) {
+            select.innerHTML = '<option value="">⚠️ Heç bir NSFW (18+) mətn kanalı tapılmadı</option>';
+            return;
+          }
+          select.innerHTML = '<option value="">-- Kanal Seçin --</option>' +
+            data.channels.map(ch => `<option value="${ch.id}">${ch.display}</option>`).join('');
+        } else {
+          select.innerHTML = `<option value="">Xəta: ${data.error || 'Kanallar oxunmadı'}</option>`;
+        }
+      } catch (err) {
+        select.innerHTML = '<option value="">Şəbəkə xətası baş verdi</option>';
+      }
+    }
+
+    function switchTab(tab) {
+      const tabCreate = document.getElementById("tabContentCreate");
+      const tabHistory = document.getElementById("tabContentHistory");
+      const btnCreate = document.getElementById("tabBtnCreate");
+      const btnHistory = document.getElementById("tabBtnHistory");
+
+      if (tab === 'create') {
+        tabCreate.classList.remove("hidden");
+        tabHistory.classList.add("hidden");
+        btnCreate.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
+        btnHistory.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent";
+      } else {
+        tabCreate.classList.add("hidden");
+        tabHistory.classList.remove("hidden");
+        btnHistory.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
+        btnCreate.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent";
+        loadHistory();
+      }
+    }
+
+    function handleFileSelection(input) {
+      selectedFilesCache = Array.from(input.files);
+      updateLivePreview();
+    }
+
+    function updateLivePreview() {
+      const title = document.getElementById("postTitle").value.trim() || "Post Başlığı Burada Görünəcək";
+      const desc = document.getElementById("postDescription").value.trim() || "Postun təsviri və mətni burada real vaxt rejimində əks olunacaq.";
+      const link = document.getElementById("postLink").value.trim() || "#";
+      const imageUrls = document.getElementById("postImageUrls").value.trim().split("\n").map(u => u.trim()).filter(Boolean);
+
+      document.getElementById("previewTitleLink").innerText = title;
+      document.getElementById("previewTitleLink").href = link !== "#" ? link : "javascript:void(0)";
+      document.getElementById("previewDescription").innerText = desc;
+      document.getElementById("previewButton").href = link !== "#" ? link : "javascript:void(0)";
+
+      const now = new Date();
+      document.getElementById("previewTimestamp").innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      const primaryImg = document.getElementById("previewPrimaryImg");
+      const placeholderText = document.getElementById("previewPlaceholderText");
+      const extraCount = document.getElementById("previewExtraCount");
+      const extraCountNum = document.getElementById("extraCountNum");
+
+      let totalImages = selectedFilesCache.length + imageUrls.length;
+
+      if (selectedFilesCache.length > 0) {
+        const file = selectedFilesCache[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          primaryImg.src = e.target.result;
+          primaryImg.classList.remove("hidden");
+          placeholderText.classList.add("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else if (imageUrls.length > 0) {
+        primaryImg.src = imageUrls[0];
+        primaryImg.classList.remove("hidden");
+        placeholderText.classList.add("hidden");
+      } else {
+        primaryImg.src = "";
+        primaryImg.classList.add("hidden");
+        placeholderText.classList.remove("hidden");
+      }
+
+      if (totalImages > 1) {
+        extraCount.classList.remove("hidden");
+        extraCountNum.innerText = totalImages - 1;
+      } else {
+        extraCount.classList.add("hidden");
+      }
+    }
+
+    // Submit Post Form
+    document.getElementById("postForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const submitBtn = document.getElementById("btnSubmitPost");
+      const submitText = document.getElementById("btnSubmitText");
+
+      submitBtn.disabled = true;
+      submitText.innerText = "Göndərilir...";
+
+      const formData = new FormData(document.getElementById("postForm"));
+
+      try {
+        const res = await fetch("/admin/api/posts", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(data.message || "Post uğurla göndərildi!", "success");
+          // Reset form
+          document.getElementById("postTitle").value = "";
+          document.getElementById("postDescription").value = "";
+          document.getElementById("postLink").value = "";
+          document.getElementById("postImageUrls").value = "";
+          document.getElementById("postFiles").value = "";
+          document.getElementById("scheduledTime").value = "";
+          selectedFilesCache = [];
+          updateLivePreview();
+        } else {
+          showToast(data.error || "Post göndərilərkən xəta baş verdi.", "error");
+        }
+      } catch (err) {
+        showToast("Şəbəkə xətası baş verdi.", "error");
+      } finally {
+        submitBtn.disabled = false;
+        submitText.innerText = "Postu Göndər";
+      }
+    });
+
+    // History Functions
+    async function loadHistory() {
+      const tbody = document.getElementById("historyTableBody");
+      tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-gray-500">Yüklənir...</td></tr>';
+
+      try {
+        const res = await fetch("/admin/api/history");
+        const data = await res.json();
+
+        if (data.success && data.posts) {
+          if (data.posts.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-gray-500">Heç bir post qeydə alınmayıb.</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = data.posts.map(p => {
+            let statusBadge = "";
+            if (p.status === "sent") {
+              statusBadge = '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">Göndərildi</span>';
+            } else if (p.status === "scheduled") {
+              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium">Planlaşdırılıb: ${p.scheduled_time || ''}</span>`;
+            } else if (p.status === "failed") {
+              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium" title="${p.error_message || ''}">Uğursuz</span>`;
+            } else {
+              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 font-medium">${p.status}</span>`;
+            }
+
+            return `
+              <tr class="hover:bg-cardHeader/50 transition">
+                <td class="px-5 py-4">
+                  <span class="font-bold text-gray-300">#${p.id}</span>
+                  <div class="text-[11px] text-gray-500 mt-0.5">${p.created_at}</div>
+                </td>
+                <td class="px-5 py-4 max-w-xs">
+                  <div class="font-semibold text-white truncate">${escapeHtml(p.title)}</div>
+                  <a href="${escapeHtml(p.link_url)}" target="_blank" class="text-brand hover:underline text-[11px] truncate block">${escapeHtml(p.link_url)}</a>
+                </td>
+                <td class="px-5 py-4 text-gray-300">${escapeHtml(p.channel_name)}</td>
+                <td class="px-5 py-4">${statusBadge}</td>
+                <td class="px-5 py-4 text-gray-400">${p.image_count} ədəd</td>
+                <td class="px-5 py-4 text-right space-x-2">
+                  <button onclick="resendPost(${p.id})" class="text-xs text-brand hover:text-white bg-brand/10 hover:bg-brand px-2.5 py-1.5 rounded-lg border border-brand/20 transition cursor-pointer">Yenidən Göndər</button>
+                  <button onclick="deletePost(${p.id})" class="text-xs text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 px-2.5 py-1.5 rounded-lg border border-red-500/20 transition cursor-pointer">Sil</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-red-400">Tarixçə yüklənərkən xəta baş verdi.</td></tr>';
+      }
+    }
+
+    async function deletePost(postId) {
+      if (!confirm(`Post #${postId} bazadan və Discord-dan silinsin?`)) return;
+
+      try {
+        const res = await fetch("/admin/api/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ post_id: postId, csrf_token: globalCsrfToken })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message, "success");
+          loadHistory();
+        } else {
+          showToast(data.error || "Silinmədi", "error");
+        }
+      } catch (err) {
+        showToast("Şəbəkə xətası", "error");
+      }
+    }
+
+    async function resendPost(postId) {
+      if (!confirm(`Post #${postId} yenidən Discord kanalına göndərilsin?`)) return;
+
+      try {
+        const res = await fetch("/admin/api/resend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ post_id: postId, csrf_token: globalCsrfToken })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message, "success");
+          loadHistory();
+        } else {
+          showToast(data.error || "Yenidən göndərilmədi", "error");
+        }
+      } catch (err) {
+        showToast("Şəbəkə xətası", "error");
+      }
+    }
+
+    function showToast(msg, type = "success") {
+      const toast = document.getElementById("toast");
+      const toastIcon = document.getElementById("toastIcon");
+      const toastMessage = document.getElementById("toastMessage");
+
+      toastMessage.innerText = msg;
+      if (type === "success") {
+        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-emerald-950/90 border-emerald-500/40 text-emerald-200";
+        toastIcon.innerHTML = `<svg class="w-5 h-5 text-emerald-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>`;
+      } else {
+        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-red-950/90 border-red-500/40 text-red-200";
+        toastIcon.innerHTML = `<svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>`;
+      }
+
+      toast.classList.remove("hidden");
+      setTimeout(() => { hideToast(); }, 5000);
+    }
+
+    function hideToast() {
+      document.getElementById("toast").classList.add("hidden");
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
+
