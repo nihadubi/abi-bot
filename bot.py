@@ -254,21 +254,21 @@ HEAVY_AZ_CURSES = [
 ]
 
 RANDOM_ILIS_QUOTES = [
-    "{mention} ala sən hələ də yaşayırsan? Çıx ortalığa görək nə hoqqalardan çıxırsan yetim 😂",
-    "{mention} qaqaş sənin bu serverdə nə iş gördüyünü bilən var ümumiyyətlə? Bir səsini çıxart görək nəçisən sən",
-    "{mention} profilinə baxdım, ürəyim sıxıldı ala, bir az özünə əl gəzdir bu nə gündür belə 🤦‍♂️",
-    "{mention} eşidirəm sağda-solda artistlik eləyirsən, ayağını yerə bas təkərin partlayar ha 😂",
-    "{mention} ala nəsə çox sakit durmusan bu aralar, xeyirdir başın daşamı dəyib?",
-    "{mention} qaqaş sən kimsən axı belə kənardan-kənardan baxırsan, gəl iki kəlmə söz de görək nə var nə yox",
-    "{mention} ala səninlə bir məsələni aydınlaşdırmalıyıq, gözüm üstündədir ha bax...",
-    "{mention} canınçün sənə bir dənə söyüş söyərdim e, amma hələ ki günahından keçirəm, adam ol 😂",
-    "{mention} ala bura bax, sən kənddə olanda da belə idin yoxsa şəhərə gələndən sonra bu günə qaldın?",
-    "{mention} yetim, axırıncı dəfə nə vaxt çimmisən? İyisi bura qədər gəlir e 🦨",
-    "{mention} qaqaş sənin danışığında bir əmma var e, axşam gəl söhbətə görək nə hoqqadır",
-    "{mention} ala bu serverdə hər kəs öz işindədir, bir tək sən havayı fırlanırsan buralarda",
-    "{mention} xoruzlanma ala elə, iki şilləlik canın var, gəl otur yerində dinməzcə",
-    "{mention} qaqaş səninlə təkbətək söhbətimiz var, özünü yığışdır yoxsa gəlib taparam səni!",
-    "{mention} sənin o baxışların xoşuma gəlmir e, bir az ciddi ol görək kiminlə söhbət eləyirsən!"
+    "{mention} salam aleykum, hardasan sən? Görünmürsən neçə vaxtdır, nə var nə yox? 👀",
+    "{mention} serverin ən sakit adamı da gəldi çıxdı axır ki, bir səsini çıxart görək necəsən",
+    "{mention} profilinə baxdım, dedim bir salam verim, nə işlə məşğulsan bu aralar? 😄",
+    "{mention} yenə nə planlar qurursan sakitcə? De biz də bilək də 😂",
+    "{mention} nəsə çox passivsən bu günlərdə, gəl qoşul söhbətə görək nə hoqqadır",
+    "{mention} kənardan sakit-sakit baxma, gəl iki kəlmə söz de görək necə gedir işlər",
+    "{mention} gözüm üstündədir ha bax, axşam gəl səsə bir çay-çörək söhbəti eləyək",
+    "{mention} səninlə bir məsələni aydınlaşdırmalıyıq, amma zarafatsız de görüm kefin necədir? 😂",
+    "{mention} serverdə hamı bir yana, sən bir yana, amma bir az aktiv ol da!",
+    "{mention} bir dəfə də sən birinci salam ver də, həmişə mən səni axtarmalıyam? 🙃",
+    "{mention} axşam gəlirsən səsə yoxsa yenə bəhanə tapacaqsan? 🎮",
+    "{mention} başın qarışıq görünür, iş-güc necə gedir?",
+    "{mention} axır ki tapdıq səni, çoxdandır ortalıqda yoxsan",
+    "{mention} zarafat bir yana, salamatlıqdır? Nə var nə yox?",
+    "{mention} gəl bir az söhbət eləyək, darıxmışıq sənin üçün!"
 ]
 
 
@@ -319,34 +319,19 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
 
     # Sistem təlimatı (Persona)
     system_instruction = (
-        "Sən Discord serverindəki 'Abi'sən — Bakı küçəsində böyümüş, məhlənin uşaqlarını tanıyan biri. "
-        "Rəsmi danışma, robot kimi danışma. 'Ala', 'qaqaş', 'brat', 'nətərsən', 'canınçün' kimi natural jarqon işlət. "
-        "Nida işarəsindən çəkin. Emoji çox nadir (max 1 dənə). Cavab MÜTLƏQ qısa olsun — 1-2 cümlə, nöqtəni qoy, bitir.\n\n"
-        "DAVRANIŞ:\n"
-        "1. NORMAL DANIŞIQ: İstifadəçi normal müraciət edəndə mehriban, qardaşyana, rahat cavab ver. "
-        "Söyüş yox, aqressivlik yox. Sadəcə məhlə qardaşı kimi ('Salam qaqaş, nətərsən', 'Canınçün de görüm', 'Baş üstə brat').\n\n"
-        "2. AQRESSİV DANIŞIQ (YALNIZ istifadəçi söyüş söyəndə/sataşanda): "
-        "Onu yerinə oturt — amma real adam kimi, mənasız roman yazmadan. "
-        "Bir-iki iti cümlə, konkret, gülməli və ya kəskin. Şablon ifadələrdən qaç, hər dəfə fərqli de. "
-        "Uzun monoloq yox — qısa, iti, bitmiş."
+        "Sən Discord serverindəki 'Abi'sən — bu serverin doğma üzvü, bizdən biri, səmimi və hazırcavab dostsan. "
+        "Süni küçə teması, məcbur 'ala', 'yetim', 'peysər' kimi jarqonlar və ya qondarma məhlə tərzi YOXDUR. "
+        "Bizdən biri kimi təbii, rahat, səmimi və axıcı Azərbaycan dilində danış. "
+        "Söyüş və ya senzura məhdudiyyəti qoyma — ortam necədirsə, söhbətə uyğun, sərbəst və təbii cavab ver. "
+        "Qarşı tərəf zarafat edirsə zarafatla, söyüş söyürsə və ya kobud danışırsa sərbəst şəkildə istədiyin təbii dildə, hazırcavab cavab ver. "
+        "Robot kimi və ya rəsmi danışma. Cavabların təbii, canlı və yerində olsun."
     )
 
     contents = []
     for role, text in history:
         contents.append({"role": role, "parts": [{"text": text}]})
 
-    # Cari sualı və kontekst təlimatını əlavə edirik
-    if is_aggressive:
-        situation_hint = (
-            "\n[VƏZİYYƏT: Sənə söyüş dedilər. Onu 1-2 cümlə ilə yerinə oturt. "
-            "Fərqli söz seç, əvvəl nə dedinisə təkrarlama. Qısa, iti, real.]"
-        )
-    else:
-        situation_hint = (
-            "\n[VƏZİYYƏT: Normal danışıq. Mehriban, rahat, jarqonla cavab ver. Söyüş yox.]"
-        )
-
-    current_user_text = f"[{user_name}]: {prompt}{situation_hint}"
+    current_user_text = f"[{user_name}]: {prompt}"
     contents.append({"role": "user", "parts": [{"text": current_user_text}]})
 
     payload = {
@@ -355,9 +340,8 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
             "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
-            "temperature": 1.05 if is_aggressive else 0.85,
-            # Aqressiv halda qısa (180 token ~2 cümlə), normal halda bir az çox (300 token)
-            "maxOutputTokens": 180 if is_aggressive else 300
+            "temperature": 0.95,
+            "maxOutputTokens": 350
         },
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -489,14 +473,14 @@ async def generate_ilis_text(member: discord.Member) -> str:
 
     prompt = (
         f"Server üzvünün adı: {member.display_name}. "
-        "Bu istifadəçiyə Discord kanalında durduq yerə məhlə stilində sataş, iliş, lağ elə və ya zarafatla söz at. "
-        "Mütləq Bakı küçə jarqonunda olsun ('qaqaş', 'yetim', 'ala', 'artistlik eləmə'). "
-        "Çox uzun olmasın, maksimum 1-2 cümlə, çox gülməli və ironik olsun. İstifadəçinin adını çəkmə, çünki mən onu birbaşa etiketləyəcəm."
+        "Bu istifadəçiyə Discord kanalında bizdən biri kimi, səmimi və zarafatla söz at, sataş və ya hal-əhval tut. "
+        "Məcbur qondarma küçə jarqonu ('qaqaş', 'yetim', 'peysər' və s.) işlətmə, təbii və səmimi dost kimi zarafat elə. "
+        "Çox uzun olmasın, maksimum 1-2 cümlə, çox gülməli və yerində olsun. İstifadəçinin adını çəkmə, çünki mən onu birbaşa etiketləyəcəm."
     )
     payload = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "systemInstruction": {
-            "parts": [{"text": "Sən Discord serverində uşaqlara durduq yerə ilişən, söz atan, məhlə zarafatları edən 'Abi'sən. Cavabların qısa, gülməli, zarafatcıl və Bakı jarqonunda olsun."}]
+            "parts": [{"text": "Sən Discord serverində uşaqlarla zarafatlaşan, söz atan, bizdən biri kimi təbii və səmimi danışan 'Abi'sən. Cavabların qısa, gülməli, zarafatcıl və təbii Azərbaycan dilində olsun."}]
         },
         "generationConfig": {"temperature": 0.95, "maxOutputTokens": 150},
         "safetySettings": [
