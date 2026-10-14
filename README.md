@@ -176,3 +176,7 @@ server {
 
 Use, modify, and adapt for your own server needs.
 
+## Local Admin Panel
+
+Open `http://localhost:8080/admin` while the bot is running. The panel listens on localhost only and includes the existing post tools plus member warnings, warning history, timeouts, kick, ban, and unban controls. Discord bot permissions and role hierarchy still apply.
+

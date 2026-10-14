@@ -105,6 +105,8 @@ class Database:
                     """
                 )
 
+                cursor.execute("DROP TABLE IF EXISTS owo_snapshots")
+
                 # Mövcud bazada çatışmayan sütunları əlavə edirik
                 cursor.execute("PRAGMA table_info(users)")
                 existing_columns = {row[1] for row in cursor.fetchall()}

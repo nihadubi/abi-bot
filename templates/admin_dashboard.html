@@ -85,6 +85,7 @@
         </svg>
         Paylaşım Tarixçəsi
       </button>
+      <button id="tabBtnModeration" onclick="switchTab('moderation')" class="pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent">Moderasiya</button>
     </div>
 
     <!-- Notification Toast Container -->
@@ -392,6 +393,24 @@
       </div>
     </div>
 
+    <div id="tabContentModeration" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <section class="lg:col-span-5 bg-cardBg border border-borderDark rounded-2xl p-6 space-y-5">
+        <div><h2 class="text-lg font-bold text-white">Server moderasiyası</h2><p class="text-xs text-gray-400 mt-1">Əməliyyatlar botun Discord icazələri ilə icra olunur.</p></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Server</label><select id="modGuildSelect" onchange="loadModerationMembers()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></select></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Üzv axtar</label><input id="modMemberSearch" oninput="scheduleMemberSearch()" placeholder="Ad, username və ya ID" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
+        <div id="modMemberWrap"><label class="block text-xs text-gray-400 mb-1">Üzv</label><select id="modMemberSelect" onchange="loadWarnings()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></select></div>
+        <div id="modUnbanWrap" class="hidden"><label class="block text-xs text-gray-400 mb-1">Banlı istifadəçinin Discord ID-si</label><input id="modUnbanId" inputmode="numeric" placeholder="Discord User ID" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Əməliyyat</label><select id="modAction" onchange="updateModerationForm()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"><option value="warn">Xəbərdarlıq (warn)</option><option value="timeout">Timeout ver</option><option value="untimeout">Timeout-u aç</option><option value="kick">Serverdən çıxar (kick)</option><option value="ban">Ban et</option><option value="unban">Banı aç</option></select></div>
+        <div id="modDurationWrap" class="hidden"><label class="block text-xs text-gray-400 mb-1">Timeout müddəti (dəqiqə, max 40320)</label><input id="modDuration" type="number" min="1" max="40320" value="10" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
+        <div><label class="block text-xs text-gray-400 mb-1">Səbəb</label><textarea id="modReason" maxlength="500" rows="3" placeholder="Səbəb qeyd et" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></textarea></div>
+        <button onclick="submitModerationAction()" class="w-full rounded-lg bg-brand hover:bg-brandHover p-3 text-sm font-semibold text-white">Əməliyyatı icra et</button>
+        <p id="modFeedback" class="text-sm text-gray-300"></p>
+      </section>
+      <section class="lg:col-span-7 bg-cardBg border border-borderDark rounded-2xl p-6">
+        <div class="flex items-center justify-between"><div><h2 class="text-lg font-bold text-white">Xəbərdarlıq tarixçəsi</h2><p id="warningTotal" class="text-xs text-gray-400 mt-1">Üzv seç</p></div><button onclick="loadWarnings()" class="rounded-lg bg-cardHeader border border-borderDark px-3 py-2 text-xs">Yenilə</button></div>
+        <div id="warningHistory" class="mt-5 space-y-3 text-sm text-gray-300">Üzv seçiləndə tarixçə burada görünür.</div>
+      </section>
+    </div>
   </main>
 
   <script>
@@ -402,6 +421,7 @@
     document.addEventListener("DOMContentLoaded", async () => {
       await fetchSessionInfo();
       await fetchChannels();
+      await loadModerationGuilds();
       updateLivePreview();
     });
 
@@ -445,21 +465,116 @@
     function switchTab(tab) {
       const tabCreate = document.getElementById("tabContentCreate");
       const tabHistory = document.getElementById("tabContentHistory");
+      const tabModeration = document.getElementById("tabContentModeration");
       const btnCreate = document.getElementById("tabBtnCreate");
       const btnHistory = document.getElementById("tabBtnHistory");
+      const btnModeration = document.getElementById("tabBtnModeration");
+      [tabCreate, tabHistory, tabModeration].forEach(el => el.classList.add("hidden"));
+      [btnCreate, btnHistory, btnModeration].forEach(el => el.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent");
 
       if (tab === 'create') {
         tabCreate.classList.remove("hidden");
-        tabHistory.classList.add("hidden");
         btnCreate.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
-        btnHistory.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent";
-      } else {
-        tabCreate.classList.add("hidden");
+      } else if (tab === 'history') {
         tabHistory.classList.remove("hidden");
         btnHistory.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
-        btnCreate.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent";
         loadHistory();
+      } else {
+        tabModeration.classList.remove("hidden");
+        btnModeration.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
+        loadModerationGuilds();
       }
+    }
+
+    let memberSearchTimer = null;
+
+    async function loadModerationGuilds() {
+      const select = document.getElementById("modGuildSelect");
+      try {
+        const response = await fetch("/admin/api/moderation/guilds");
+        const data = await response.json();
+        if (!data.success) { document.getElementById("modFeedback").textContent = data.error || "Serverlər yüklənmədi."; return; }
+        const previous = select.value;
+        select.innerHTML = '<option value="">Server seç</option>' + data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+        if (data.guilds.some(g => g.id === previous)) select.value = previous;
+        else if (data.guilds.length === 1) select.value = data.guilds[0].id;
+        if (select.value) await loadModerationMembers();
+      } catch (_) { document.getElementById("modFeedback").textContent = "Moderasiya API-yə qoşulmaq mümkün olmadı."; }
+    }
+
+    function scheduleMemberSearch() {
+      clearTimeout(memberSearchTimer);
+      memberSearchTimer = setTimeout(loadModerationMembers, 250);
+    }
+
+    async function loadModerationMembers() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const select = document.getElementById("modMemberSelect");
+      if (!guildId) { select.innerHTML = '<option value="">Əvvəl server seç</option>'; return; }
+      const query = document.getElementById("modMemberSearch").value.trim();
+      try {
+        const response = await fetch(`/admin/api/moderation/members?guild_id=${encodeURIComponent(guildId)}&q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        if (!data.success) { select.innerHTML = `<option value="">${escapeHtml(data.error || "Üzvlər yüklənmədi")}</option>`; return; }
+        select.innerHTML = '<option value="">Üzv seç</option>' + data.members.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (@${escapeHtml(m.username)}) · ${m.id}</option>`).join("");
+        if (data.members.length === 1) { select.value = data.members[0].id; loadWarnings(); }
+        else { document.getElementById("warningTotal").textContent = "Üzv seç"; document.getElementById("warningHistory").textContent = "Üzv seçiləndə tarixçə burada görünür."; }
+      } catch (_) { select.innerHTML = '<option value="">Üzvlər yüklənmədi</option>'; }
+    }
+
+    async function loadWarnings() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = document.getElementById("modMemberSelect").value;
+      const total = document.getElementById("warningTotal");
+      const root = document.getElementById("warningHistory");
+      if (!guildId || !userId) { total.textContent = "Üzv seç"; root.textContent = "Üzv seçiləndə tarixçə burada görünür."; return; }
+      root.textContent = "Yüklənir...";
+      try {
+        const response = await fetch(`/admin/api/moderation/warnings?guild_id=${encodeURIComponent(guildId)}&user_id=${encodeURIComponent(userId)}`);
+        const data = await response.json();
+        if (!data.success) { root.textContent = data.error || "Tarixçə yüklənmədi."; return; }
+        total.textContent = `Ümumi xəbərdarlıq: ${data.total}`;
+        root.innerHTML = data.warnings.length ? data.warnings.map(w => `<article class="rounded-lg bg-[#111319] border border-borderDark p-3"><div class="flex justify-between text-xs text-gray-500"><span>#${w.id} · ${escapeHtml(w.date)}</span><span>Moderator ID: ${w.moderator_id == null ? "Admin panel" : escapeHtml(w.moderator_id)}</span></div><p class="mt-2">${escapeHtml(w.reason)}</p></article>`).join("") : '<p class="text-gray-500">Xəbərdarlıq yoxdur.</p>';
+      } catch (_) { root.textContent = "Xəbərdarlıq tarixçəsi yüklənmədi."; }
+    }
+
+    function updateModerationForm() {
+      const isUnban = document.getElementById("modAction").value === "unban";
+      document.getElementById("modUnbanWrap").classList.toggle("hidden", !isUnban);
+      document.getElementById("modMemberWrap").classList.toggle("hidden", isUnban);
+      document.getElementById("modMemberSearch").parentElement.classList.toggle("hidden", isUnban);
+      document.getElementById("modDurationWrap").classList.toggle("hidden", document.getElementById("modAction").value !== "timeout");
+    }
+
+    async function submitModerationAction() {
+      const action = document.getElementById("modAction").value;
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = action === "unban" ? document.getElementById("modUnbanId").value.trim() : document.getElementById("modMemberSelect").value;
+      const feedback = document.getElementById("modFeedback");
+      if (!guildId || !/^\d{15,22}$/.test(userId)) { feedback.textContent = "Server və düzgün Discord istifadəçi ID-si seç və ya daxil et."; return; }
+      if (["kick", "ban"].includes(action) && !confirm(`${action === "ban" ? "Ban" : "Kick"} əməliyyatı təsdiqlənsin?`)) return;
+      const payload = {
+        action, guild_id: guildId, user_id: userId,
+        reason: document.getElementById("modReason").value.trim(),
+        minutes: document.getElementById("modDuration").value,
+        csrf_token: globalCsrfToken,
+      };
+      feedback.textContent = "Əməliyyat icra olunur...";
+      try {
+        const response = await fetch("/admin/api/moderation/action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+        const data = await response.json();
+        feedback.textContent = data.success ? data.message : (data.error || "Əməliyyat baş tutmadı.");
+        feedback.className = data.success ? "text-sm text-emerald-400" : "text-sm text-red-400";
+        if (data.success) {
+          if (action === "warn") await loadWarnings();
+          if (["kick", "ban"].includes(action)) await loadModerationMembers();
+          document.getElementById("modReason").value = "";
+        }
+      } catch (_) { feedback.textContent = "Sorğu göndərilərkən şəbəkə xətası oldu."; }
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
     }
 
     let uploadedFilesList = []; // Holds File objects in exact user order

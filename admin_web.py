@@ -155,6 +155,162 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             "csrf_token": session.get("csrf_token") if session else ""
         })
 
+    def moderation_guild(guild_id: int):
+        configured_id = int(os.getenv("GUILD_ID", "0") or 0)
+        if configured_id and configured_id != guild_id:
+            return None
+        return bot.get_guild(guild_id)
+
+    @require_auth
+    async def handle_api_moderation_guilds(request: web.Request):
+        configured_id = int(os.getenv("GUILD_ID", "0") or 0)
+        guilds = [guild for guild in bot.guilds if not configured_id or guild.id == configured_id]
+        return web.json_response({
+            "success": True,
+            "guilds": [{"id": str(guild.id), "name": guild.name} for guild in guilds],
+        })
+
+    @require_auth
+    async def handle_api_moderation_members(request: web.Request):
+        guild_id = request.query.get("guild_id", "")
+        if not guild_id.isdigit():
+            return web.json_response({"success": False, "error": "Server seçilməyib."}, status=400)
+        guild = moderation_guild(int(guild_id))
+        if not guild:
+            return web.json_response({"success": False, "error": "Server tapılmadı və ya icazəli deyil."}, status=404)
+        query = request.query.get("q", "").strip().casefold()
+        members = [member for member in guild.members if not member.bot]
+        if query:
+            members = [member for member in members if query in member.display_name.casefold() or query in member.name.casefold() or query in str(member.id)]
+        members.sort(key=lambda member: member.display_name.casefold())
+        return web.json_response({
+            "success": True,
+            "members": [{"id": str(member.id), "name": member.display_name, "username": member.name} for member in members[:100]],
+        })
+
+    @require_auth
+    async def handle_api_moderation_warnings(request: web.Request):
+        guild_id = request.query.get("guild_id", "")
+        user_id = request.query.get("user_id", "")
+        if not guild_id.isdigit() or not user_id.isdigit():
+            return web.json_response({"success": False, "error": "Server və üzv seçilməlidir."}, status=400)
+        guild = moderation_guild(int(guild_id))
+        if not guild:
+            return web.json_response({"success": False, "error": "Server tapılmadı."}, status=404)
+        return web.json_response({
+            "success": True,
+            "total": db.get_warning_count(int(user_id)),
+            "warnings": db.get_warnings(int(user_id), limit=20),
+        })
+
+    @require_auth
+    async def handle_api_moderation_action(request: web.Request):
+        try:
+            data = await request.json()
+            guild_id = int(data.get("guild_id", 0))
+            user_id = int(data.get("user_id", 0))
+            action = str(data.get("action", "")).strip().lower()
+            reason = str(data.get("reason", "")).strip()[:500] or "Admin panel əməliyyatı"
+            csrf_token = data.get("csrf_token", "")
+            minutes = int(data.get("minutes", 0) or 0)
+        except Exception:
+            return web.json_response({"success": False, "error": "Sorğu məlumatı düzgün deyil."}, status=400)
+        if not verify_csrf(request, csrf_token):
+            return web.json_response({"success": False, "error": "CSRF yoxlaması uğursuz oldu."}, status=403)
+        if action not in {"warn", "timeout", "untimeout", "kick", "ban", "unban"} or guild_id <= 0 or user_id <= 0:
+            return web.json_response({"success": False, "error": "Əməliyyat və ya istifadəçi ID-si düzgün deyil."}, status=400)
+        if not bot.is_ready():
+            return web.json_response({"success": False, "error": "Discord botu hazır deyil."}, status=503)
+        guild = moderation_guild(guild_id)
+        if not guild:
+            return web.json_response({"success": False, "error": "Server tapılmadı və ya icazəli deyil."}, status=404)
+        me = guild.me
+        if not me:
+            return web.json_response({"success": False, "error": "Botun server üzvlük məlumatı tapılmadı."}, status=503)
+        audit_reason = f"Admin Panel | {reason}"[:512]
+
+        if action == "unban":
+            if not me.guild_permissions.ban_members:
+                return web.json_response({"success": False, "error": "Bota Ban Members icazəsi verilməyib."}, status=403)
+            try:
+                ban_entry = await guild.fetch_ban(discord.Object(id=user_id))
+                await guild.unban(ban_entry.user, reason=audit_reason)
+            except discord.NotFound:
+                return web.json_response({"success": False, "error": "Bu ID ilə banlı üzv tapılmadı."}, status=404)
+            except discord.Forbidden:
+                return web.json_response({"success": False, "error": "Discord botun banı açmasına icazə vermədi."}, status=403)
+            except discord.HTTPException:
+                return web.json_response({"success": False, "error": "Discord banı aça bilmədi."}, status=502)
+            return web.json_response({"success": True, "message": f"{user_id} ID-li üzvün banı açıldı."})
+
+        member = guild.get_member(user_id)
+        if not member:
+            try:
+                member = await guild.fetch_member(user_id)
+            except discord.NotFound:
+                return web.json_response({"success": False, "error": "Üzv bu serverdə tapılmadı."}, status=404)
+            except discord.Forbidden:
+                return web.json_response({"success": False, "error": "Bot üzv məlumatını oxuya bilmədi."}, status=403)
+            except discord.HTTPException:
+                return web.json_response({"success": False, "error": "Discord üzv məlumatını ala bilmədi."}, status=502)
+
+        if action == "warn":
+            db.upsert_user_identity(member.id, member.name, member.display_name)
+            previous_total = db.get_warning_count(member.id)
+            db.add_warning(member.id, None, reason)
+            total = db.get_warning_count(member.id)
+            if total != previous_total + 1:
+                return web.json_response({"success": False, "error": "Xəbərdarlıq bazaya yazılmadı."}, status=500)
+            note = f"Xəbərdarlıq qeyd edildi. Ümumi say: {total}."
+            if total in (3, 5) or total > 5:
+                if me.guild_permissions.moderate_members and member.id != guild.owner_id and me.top_role > member.top_role:
+                    timeout_hours = 1 if total == 3 else 24
+                    try:
+                        await member.timeout(discord.utils.utcnow() + timedelta(hours=timeout_hours), reason=f"Admin Panel: {total} xəbərdarlıq")
+                        note += f" Avtomatik {timeout_hours} saatlıq timeout tətbiq edildi."
+                    except discord.HTTPException:
+                        note += " Avtomatik timeout tətbiq edilə bilmədi."
+            return web.json_response({"success": True, "message": note})
+
+        if action in {"timeout", "untimeout"}:
+            if not me.guild_permissions.moderate_members:
+                return web.json_response({"success": False, "error": "Bota Moderate Members icazəsi verilməyib."}, status=403)
+            if member.id == guild.owner_id or me.top_role <= member.top_role:
+                return web.json_response({"success": False, "error": "Botun rolu bu üzvün rolundan yuxarı olmalıdır."}, status=403)
+            if action == "untimeout":
+                until = None
+                success_message = f"{member.display_name} üçün timeout qaldırıldı."
+            else:
+                if not 1 <= minutes <= 40320:
+                    return web.json_response({"success": False, "error": "Timeout 1–40320 dəqiqə arasında olmalıdır."}, status=400)
+                until = discord.utils.utcnow() + timedelta(minutes=minutes)
+                success_message = f"{member.display_name} üçün {minutes} dəqiqəlik timeout tətbiq edildi."
+            try:
+                await member.timeout(until, reason=audit_reason)
+            except discord.Forbidden:
+                return web.json_response({"success": False, "error": "Discord bu timeout əməliyyatına icazə vermədi."}, status=403)
+            except discord.HTTPException:
+                return web.json_response({"success": False, "error": "Discord timeout əməliyyatını icra edə bilmədi."}, status=502)
+            return web.json_response({"success": True, "message": success_message})
+
+        permission = "kick_members" if action == "kick" else "ban_members"
+        if not getattr(me.guild_permissions, permission):
+            return web.json_response({"success": False, "error": f"Bota {permission.replace('_', ' ').title()} icazəsi verilməyib."}, status=403)
+        if member.id == guild.owner_id or me.top_role <= member.top_role:
+            return web.json_response({"success": False, "error": "Botun rolu bu üzvün rolundan yuxarı olmalıdır."}, status=403)
+        try:
+            if action == "kick":
+                await member.kick(reason=audit_reason)
+                message = f"{member.display_name} serverdən çıxarıldı."
+            else:
+                await member.ban(reason=audit_reason, delete_message_seconds=0)
+                message = f"{member.display_name} serverdən banlandı."
+        except discord.Forbidden:
+            return web.json_response({"success": False, "error": "Discord botun bu üzvə qarşı əməliyyatına icazə vermədi."}, status=403)
+        except discord.HTTPException:
+            return web.json_response({"success": False, "error": "Discord moderasiya əməliyyatını icra edə bilmədi."}, status=502)
+        return web.json_response({"success": True, "message": message})
+
     # 6. API: Fetch NSFW Channels
     @require_auth
     async def handle_api_channels(request: web.Request):
@@ -529,6 +685,10 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
 
     app.router.add_get("/admin", handle_admin_dashboard)
     app.router.add_get("/admin/api/session", handle_api_session_info)
+    app.router.add_get("/admin/api/moderation/guilds", handle_api_moderation_guilds)
+    app.router.add_get("/admin/api/moderation/members", handle_api_moderation_members)
+    app.router.add_get("/admin/api/moderation/warnings", handle_api_moderation_warnings)
+    app.router.add_post("/admin/api/moderation/action", handle_api_moderation_action)
     app.router.add_get("/admin/api/channels", handle_api_channels)
     app.router.add_post("/admin/api/posts", handle_api_create_post)
     app.router.add_get("/admin/api/history", handle_api_history)

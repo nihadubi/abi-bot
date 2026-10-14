@@ -296,7 +296,7 @@ def check_is_aggressive(text: str) -> bool:
     return False
 
 
-async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt: str) -> str:
+async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt: str, max_output_tokens: int = 350) -> str:
     """Google Gemini API vasitəsilə kontekstli, tənzimlənmiş və zəkili cavab hazırlayır."""
     import random
     is_aggressive = check_is_aggressive(prompt)
@@ -341,7 +341,7 @@ async def generate_gemini_reply(channel_or_user_id: int, user_name: str, prompt:
         },
         "generationConfig": {
             "temperature": 0.95,
-            "maxOutputTokens": 350
+            "maxOutputTokens": max_output_tokens
         },
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -992,7 +992,6 @@ async def on_member_join(member: discord.Member):
 
 @bot.event
 async def on_message(message: discord.Message):
-    # Botun öz mesajlarını və digər botları ignor edirik
     if message.author.bot:
         return
 
@@ -3191,7 +3190,7 @@ async def start_web_server():
     port = int(os.getenv("PORT", 8080))
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, "127.0.0.1", port)
     await site.start()
     logger.info(f"Veb server (Admin Panel daxil) port {port}-də başladı.")
 
