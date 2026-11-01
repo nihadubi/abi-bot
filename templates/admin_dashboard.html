@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Abi Bot — Admin Panel</title>
+  <title>Abi Bot — Pro Admin Suite</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -13,10 +13,11 @@
           colors: {
             brand: '#5865F2',
             brandHover: '#4752C4',
-            darkBg: '#0e1015',
-            cardBg: '#161922',
-            cardHeader: '#1e222e',
-            borderDark: '#282d3d',
+            brandGlow: 'rgba(88, 101, 242, 0.35)',
+            darkBg: '#090a0f',
+            cardBg: '#11141c',
+            cardHeader: '#171b26',
+            borderDark: '#222838',
             discordDark: '#2b2d31',
             discordEmbed: '#1e1f22',
             discordBtn: '#4e5058'
@@ -26,41 +27,71 @@
     }
   </script>
   <style>
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: #111319; }
-    ::-webkit-scrollbar-thumb { background: #282d3d; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3c435c; }
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#090a0f; color:#e2e8f0; }
+    *, *::before, *::after { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:#090a0f; color:#e2e8f0; }
+    button, input, select, textarea { font:inherit; } button { cursor:pointer; } a { color:inherit; text-decoration:none; }
+    img, svg { vertical-align:middle; } img { max-width:100%; }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: #0b0d13; }
+    ::-webkit-scrollbar-thumb { background: #262c3e; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3c445e; }
+
+    /* Glass & Glow */
+    .glass-card { background: rgba(17, 20, 28, 0.85); backdrop-filter: blur(12px); border: 1px solid #222838; }
+    .glass-panel { background: rgba(23, 27, 38, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); }
+    .glow-brand { box-shadow: 0 0 25px rgba(88, 101, 242, 0.22); }
+    .glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+    
+    .tab-active { color: #818cf8 !important; border-bottom: 2px solid #5865f2 !important; background: rgba(88, 101, 242, 0.08); border-radius: 8px 8px 0 0; }
+    .tab-inactive { color: #94a3b8; border-bottom: 2px solid transparent; }
+    .tab-inactive:hover { color: #f1f5f9; background: rgba(255, 255, 255, 0.03); border-radius: 8px 8px 0 0; }
+
+    input, select, textarea { color:#f8fafc; background:#0c0e14; border:1px solid #222838; border-radius:0.75rem; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25); }
+    table { border-collapse: collapse; } th, td { border-bottom: 1px solid #1e2433; }
   </style>
 </head>
-<body class="bg-darkBg text-gray-200 min-h-screen flex flex-col antialiased selection:bg-brand selection:text-white">
+<body class="bg-darkBg text-slate-200 min-h-screen flex flex-col antialiased selection:bg-brand selection:text-white">
 
-  <!-- Header -->
-  <header class="bg-cardBg border-b border-borderDark sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl bg-brand flex items-center justify-center shadow-md shadow-brand/20">
+  <!-- Top Navigation Header -->
+  <header class="glass-card sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-borderDark">
+    <div class="flex items-center gap-3.5">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand to-indigo-500 flex items-center justify-center shadow-lg shadow-brand/30">
         <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
         </svg>
       </div>
       <div>
-        <h1 class="text-lg font-bold text-white tracking-wide flex items-center gap-2">
-          Abi Bot <span class="text-xs px-2 py-0.5 rounded-full bg-brand/20 text-brand font-medium">Web Admin</span>
-        </h1>
-        <p class="text-xs text-gray-400">Discord Embed Paylaşım və İdarəetmə Paneli</p>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base sm:text-lg font-bold text-white tracking-wide">Abi Bot</h1>
+          <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/20 text-indigo-400 border border-brand/30">PRO ADMIN 2.0</span>
+        </div>
+        <p class="text-xs text-slate-400">Canlı Statistika, Moderasiya, Rol və Discord Paylaşım İdarəetməsi</p>
       </div>
     </div>
 
     <div class="flex items-center gap-3">
-      <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        Sistem Aktivdir
+      <!-- Live Gateway Status Badge -->
+      <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 glow-emerald">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span id="gatewayStatusText">Bot Aktivdir</span>
+        <span id="pingBadge" class="text-slate-400 font-mono text-[11px] ml-1">...ms</span>
       </div>
-      <a
-        href="/admin/logout"
-        class="flex items-center gap-1.5 text-xs font-medium text-gray-300 hover:text-white bg-cardHeader hover:bg-borderDark px-3.5 py-2 rounded-lg border border-borderDark transition"
-      >
-        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+      <button onclick="refreshCurrentTab()" title="Məlumatları yenilə" class="p-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300 hover:text-white transition">
+        <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </button>
+
+      <a href="/admin/logout" class="flex items-center gap-1.5 text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-600 px-3.5 py-2 rounded-lg border border-rose-500/20 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
         </svg>
         <span>Çıxış</span>
@@ -69,42 +100,141 @@
   </header>
 
   <!-- Main Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-6">
 
-    <!-- Tabs Navigation -->
-    <div class="flex border-b border-borderDark gap-4 text-sm font-medium">
-      <button id="tabBtnCreate" onclick="switchTab('create')" class="pb-3 text-brand border-b-2 border-brand flex items-center gap-2">
+    <!-- Top Tabs Navigation -->
+    <div class="flex overflow-x-auto border-b border-borderDark gap-2 text-sm font-semibold pb-0 scrollbar-none">
+      <button id="tabBtnOverview" onclick="switchTab('overview')" class="tab-active px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        <span>Ümumi Baxış (Overview)</span>
+      </button>
+
+      <button id="tabBtnCreate" onclick="switchTab('create')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
-        Yeni Post Paylaş
+        <span>Yeni Post Paylaş</span>
       </button>
-      <button id="tabBtnHistory" onclick="switchTab('history')" class="pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent">
+
+      <button id="tabBtnHistory" onclick="switchTab('history')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
-        Paylaşım Tarixçəsi
+        <span>Paylaşım Tarixçəsi</span>
       </button>
-      <button id="tabBtnModeration" onclick="switchTab('moderation')" class="pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent">Moderasiya</button>
+
+      <button id="tabBtnModeration" onclick="switchTab('moderation')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+        </svg>
+        <span>Moderasiya & Rollar</span>
+      </button>
+
+      <button id="tabBtnStructure" onclick="switchTab('structure')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+        </svg>
+        <span>Server Strukturu</span>
+      </button>
+
+      <button id="tabBtnBots" onclick="switchTab('bots')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+        </svg>
+        <span>Bot Bələdçiləri</span>
+      </button>
+
+      <button id="tabBtnLogs" onclick="switchTab('logs')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
+        <span>◉</span><span>Loglar</span>
+      </button>
     </div>
 
     <!-- Notification Toast Container -->
     <div id="toast" class="hidden fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 transition-all duration-300">
       <div id="toastIcon"></div>
       <div id="toastMessage" class="flex-1"></div>
-      <button onclick="hideToast()" class="text-gray-400 hover:text-white">&times;</button>
+      <button onclick="hideToast()" class="text-slate-400 hover:text-white">&times;</button>
     </div>
 
-    <!-- TAB 1: CREATE POST & LIVE PREVIEW -->
-    <div id="tabContentCreate" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+    <!-- ==================== TAB 0: OVERVIEW & SYSTEM STATS ==================== -->
+    <div id="tabContentOverview" class="space-y-6">
+      <!-- 4 High Level Stat Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <!-- Servers -->
+        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Discord Serverlər</p>
+            <h3 id="statGuilds" class="text-2xl font-black text-white mt-1">--</h3>
+            <span class="text-[11px] text-indigo-400 font-medium">Bütün serverlərdə aktiv</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          </div>
+        </div>
 
+        <!-- Total Users -->
+        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ümumi İcmalar</p>
+            <h3 id="statUsers" class="text-2xl font-black text-white mt-1">--</h3>
+            <span id="statVoice" class="text-[11px] text-emerald-400 font-medium">-- səsli otaqda</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+          </div>
+        </div>
+
+        <!-- Channels -->
+        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kanallar & Postlar</p>
+            <h3 id="statChannels" class="text-2xl font-black text-white mt-1">--</h3>
+            <span id="statScheduled" class="text-[11px] text-amber-400 font-medium">-- planlaşdırılıb</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+          </div>
+        </div>
+
+        <!-- Resources (RAM & Uptime) -->
+        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">RAM & İşləmə Vaxtı</p>
+            <h3 id="statRam" class="text-2xl font-black text-white mt-1">-- MB</h3>
+            <span id="statUptime" class="text-[11px] text-cyan-400 font-medium">Uptime: --</span>
+          </div>
+          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server Cards Grid -->
+      <div class="glass-card rounded-2xl p-6 border border-borderDark space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-bold text-white">Qoşulduğu Discord Serverləri</h2>
+            <p class="text-xs text-slate-400">Botun hazırda quraşdırıldığı bütün icmalar və onların statistikası</p>
+          </div>
+          <button onclick="loadSystemStats()" class="text-xs px-3 py-1.5 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
+        </div>
+        <div id="overviewGuildsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="p-6 text-center text-slate-500 text-sm col-span-full">Statistika yüklənir...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 1: CREATE POST & LIVE PREVIEW ==================== -->
+    <div id="tabContentCreate" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
       <!-- Form Column -->
-      <div class="lg:col-span-7 bg-cardBg border border-borderDark rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+      <div class="lg:col-span-7 glass-card border border-borderDark rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
         <div>
           <h2 class="text-lg font-bold text-white flex items-center gap-2">
             <span>📝 Post Formu</span>
           </h2>
-          <p class="text-xs text-gray-400 mt-1">Daxil etdiyiniz məlumatlar avtomatik Discord Embed formatında paylanacaq.</p>
+          <p class="text-xs text-slate-400 mt-1">Daxil etdiyiniz məlumatlar avtomatik Discord Embed formatında paylanacaq.</p>
         </div>
 
         <form id="postForm" class="space-y-5" enctype="multipart/form-data">
@@ -112,7 +242,7 @@
 
           <!-- Channel Dropdown -->
           <div>
-            <label for="channelSelect" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+            <label for="channelSelect" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
               Hədəf Kanal (Yalnız NSFW / Yaş Məhdudiyyətli) <span class="text-red-400">*</span>
             </label>
             <div class="relative">
@@ -120,272 +250,221 @@
                 id="channelSelect"
                 name="channel_id"
                 required
-                class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition appearance-none cursor-pointer"
+                class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition appearance-none cursor-pointer"
               >
                 <option value="">Kanal yüklənir...</option>
               </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                </svg>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
               </div>
             </div>
-            <p class="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-              </svg>
-              Təhlükəsizlik qaydası: Yalnız Discord-da 18+ (NSFW) qeyd edilmiş kanallar dəstəklənir.
+            <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              Yalnız Discord-da 18+ (NSFW) qeyd edilmiş kanallar dəstəklənir.
             </p>
           </div>
 
           <!-- Title -->
           <div>
-            <label for="postTitle" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
+            <label for="postTitle" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
               Başlıq (Title) <span class="text-red-400">*</span>
             </label>
             <input
               type="text"
               id="postTitle"
               name="title"
+              maxlength="256"
               required
-              placeholder="Məsələn: Eksklüziv Yenilik və ya Maraqlı Post"
-              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+              placeholder="Postun qısa və cəlbedici başlığı..."
+              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
               oninput="updateLivePreview()"
             />
           </div>
 
           <!-- Description -->
           <div>
-            <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
-              Təsvir (Description) <span class="text-gray-500 font-normal">(İstəyə bağlı)</span>
-            </label>
+            <div class="flex items-center justify-between mb-2">
+              <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Açıqlama (Description) <span class="text-red-400">*</span>
+              </label>
+              <span id="charCount" class="text-[11px] text-slate-500 font-mono">0 / 4000</span>
+            </div>
             <textarea
               id="postDescription"
               name="description"
-              rows="4"
-              placeholder="Postun mətni, təsviri və ya qeydlər..."
-              class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition leading-relaxed"
+              rows="5"
+              maxlength="4000"
+              required
+              placeholder="Post mətni..."
+              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition resize-y"
               oninput="updateLivePreview()"
             ></textarea>
           </div>
 
           <!-- Link URL -->
           <div>
-            <label for="postLink" class="block text-xs font-semibold uppercase tracking-wider text-gray-300 mb-2">
-              Keçid Linki (Link URL) <span class="text-red-400">*</span>
+            <label for="postLink" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+              Keçid Linki (Daxil ol Düyməsi) <span class="text-red-400">*</span>
             </label>
-            <div class="relative">
-              <input
-                type="url"
-                id="postLink"
-                name="link_url"
-                required
-                placeholder="https://example.com/post/123"
-                class="w-full px-4 py-3 bg-[#111319] border border-borderDark rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-brand focus:outline-none transition pl-10"
-                oninput="updateLivePreview()"
-              />
-              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
-                </svg>
-              </div>
-            </div>
-            <p class="text-[11px] text-gray-400 mt-1">Bu link Discord mesajında "Open" düyməsi kimi göstəriləcək.</p>
+            <input
+              type="url"
+              id="postLink"
+              name="link_url"
+              required
+              placeholder="https://t.me/... və ya https://..."
+              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+              oninput="updateLivePreview()"
+            />
           </div>
 
-          <!-- Images Section (Upload only) -->
-          <div class="p-4 rounded-xl bg-[#111319] border border-borderDark space-y-4">
-            <div class="flex items-center justify-between">
-              <label class="text-xs font-semibold uppercase tracking-wider text-gray-300">
-                Şəkillər (Fayl və ya Ctrl+V)
+          <!-- Scheduled Post Options -->
+          <div class="pt-2 border-t border-borderDark/60">
+            <label for="scheduledTime" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+              Planlaşdırılmış Göndərmə Vaxtı (İstəyə görə)
+            </label>
+            <input
+              type="datetime-local"
+              id="scheduledTime"
+              name="scheduled_time"
+              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition cursor-pointer"
+            />
+            <p class="text-[11px] text-slate-500 mt-1.5">Boş saxlasanız, post dərhal paylanacaq.</p>
+          </div>
+
+          <!-- Multiple Image Upload -->
+          <div class="pt-2 border-t border-borderDark/60">
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                Şəkillər (Max 10 ədəd, hərəsi max 8MB)
               </label>
-              <div class="flex items-center gap-2">
-                <span id="imageCounter" class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand/20 text-brand">0/10</span>
-                <span class="text-[11px] text-gray-400">Maksimum 10</span>
-              </div>
+              <span id="imageCounter" class="text-[11px] font-bold text-slate-400">0 / 10 ədəd</span>
             </div>
 
-            <!-- Upload drop zone -->
-            <div
-              id="dropZone"
-              class="relative border-2 border-dashed border-borderDark hover:border-brand/60 rounded-xl p-5 text-center transition bg-cardBg cursor-pointer group"
-              onclick="document.getElementById('postFiles').click()"
-            >
-              <input
-                type="file"
-                id="postFiles"
-                multiple
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                class="hidden"
-                onchange="handleFileSelection(this)"
-              />
-              <div class="flex flex-col items-center justify-center gap-2">
-                <div class="w-10 h-10 rounded-xl bg-brand/10 text-brand flex items-center justify-center group-hover:scale-110 transition">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                  </svg>
-                </div>
-                <div>
-                  <span class="text-xs font-medium text-white group-hover:text-brand transition">Şəkil seçmək və ya sürükləyib atmaq üçün klikləyin</span>
-                  <p class="text-[11px] text-gray-400 mt-0.5">PNG, JPG, WEBP, GIF (Hər dəfə seçdikdə siyahıya əlavə olunur)</p>
-                </div>
-                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#161922] border border-borderDark text-[11px] text-gray-400 mt-1">
-                  <kbd class="px-1.5 py-0.5 text-[10px] font-semibold text-gray-300 bg-borderDark rounded">Ctrl</kbd> + <kbd class="px-1.5 py-0.5 text-[10px] font-semibold text-gray-300 bg-borderDark rounded">V</kbd>
-                  <span>ilə şəkil yapışdıra bilərsən</span>
-                </div>
+            <div class="space-y-4">
+              <div
+                id="dropZone"
+                class="border-2 border-dashed border-borderDark hover:border-brand/60 rounded-xl p-5 text-center cursor-pointer transition bg-[#0c0e14]/50"
+                onclick="document.getElementById('fileInput').click()"
+              >
+                <svg class="mx-auto h-8 w-8 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <p class="text-xs text-slate-300 font-medium">Şəkilləri seçin və ya bura atın</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">PNG, JPG, WEBP, GIF dəstəklənir</p>
+                <input
+                  type="file"
+                  id="fileInput"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  class="hidden"
+                  onchange="handleFileSelection(this)"
+                />
               </div>
-            </div>
 
-            <!-- Thumbnail Grid for Selected / Pasted Images -->
-            <div id="thumbnailContainer" class="hidden space-y-2">
-              <div class="flex items-center justify-between text-[11px] text-gray-400">
-                <span>Seçilmiş Şəkillər (<span id="thumbCount">0</span>) • Sürüşdürərək sıranı dəyişə bilərsiniz</span>
-                <button type="button" onclick="clearAllFiles()" class="text-red-400 hover:underline">Hamısını Sil</button>
-              </div>
-              <div id="thumbnailGrid" class="grid grid-cols-3 sm:grid-cols-5 gap-2.5"></div>
+              <!-- Thumbnails Preview Container -->
+              <div id="thumbnailsContainer" class="hidden grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2"></div>
             </div>
           </div>
 
           <!-- Submit Button -->
-          <button
-            type="submit"
-            id="btnSubmitPost"
-            class="w-full py-4 px-6 bg-brand hover:bg-brandHover active:scale-[0.99] text-white font-semibold rounded-xl transition shadow-lg shadow-brand/25 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-            </svg>
-            <span id="btnSubmitText">Postu Göndər</span>
-          </button>
+          <div class="pt-4 border-t border-borderDark">
+            <button
+              type="submit"
+              id="submitBtn"
+              class="w-full py-4 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg shadow-brand/25 flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+              </svg>
+              <span id="submitBtnText">Discord Kanalına Paylaş</span>
+            </button>
+          </div>
         </form>
       </div>
 
-      <!-- Live Preview Column -->
+      <!-- Live Discord Preview Column -->
       <div class="lg:col-span-5 space-y-4">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <span>👁️ Canlı Discord Görünüşü</span>
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <span>Canlı Discord Önbaxışı (1:1 Live Preview)</span>
           </h2>
-          <span class="text-xs px-2.5 py-1 rounded-full bg-borderDark text-gray-300">Live Preview</span>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-cardHeader text-slate-400 font-mono">CLIENT RENDER</span>
         </div>
 
-        <!-- Discord App Container Simulation -->
-        <div class="bg-discordDark border border-borderDark/80 rounded-2xl p-5 shadow-2xl space-y-3 font-sans">
-          <!-- Bot author info in Discord -->
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-brand flex items-center justify-center text-white font-bold text-sm">
-              AB
+        <div class="bg-[#313338] rounded-xl p-4 sm:p-5 shadow-2xl border border-white/5 space-y-3 font-sans">
+          <!-- Discord User Message Header -->
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full bg-brand flex-shrink-0 flex items-center justify-center overflow-hidden">
+              <span class="text-white font-bold text-xs" id="previewBotInitial">A</span>
             </div>
-            <div>
-              <div class="flex items-center gap-1.5">
-                <span class="font-semibold text-white text-sm">Abi Bot</span>
-                <span class="text-[10px] bg-brand text-white font-bold px-1 rounded">BOT</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-white text-sm" id="previewBotName">Abi Bot</span>
+                <span class="bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">BOT</span>
+                <span class="text-slate-400 text-xs font-normal" id="previewTimestamp">Bu gün saat 02:45</span>
               </div>
-              <span class="text-[11px] text-gray-400">Bu gün saat 12:00</span>
-            </div>
-          </div>
 
-          <!-- Embed Box -->
-          <div class="border-l-4 border-brand bg-discordEmbed rounded-r-xl p-4 space-y-3 shadow-md max-w-full overflow-hidden">
-            <!-- Embed Title & Link -->
-            <a
-              id="previewTitleLink"
-              href="#"
-              target="_blank"
-              class="block text-base font-bold text-brand hover:underline break-words"
-            >
-              Post Başlığı Burada Görünəcək
-            </a>
+              <!-- Embed Body Container -->
+              <div class="mt-2.5 max-w-full rounded bg-[#2b2d31] border-l-4 border-brand p-3.5 space-y-3 text-slate-300 text-xs sm:text-sm shadow-md">
+                <div id="previewTitle" class="font-bold text-white text-base leading-snug">Başlıq burada görünəcək</div>
+                <div id="previewDesc" class="whitespace-pre-wrap leading-relaxed break-words text-slate-300">Açıqlama mətni burada nümayiş olunacaq...</div>
+                
+                <!-- Embed Media Container -->
+                <div id="previewMediaWrap" class="hidden overflow-hidden rounded-lg aspect-video bg-[#1e1f22] relative">
+                  <img id="previewMediaImg" src="" alt="Post Preview" class="w-full h-full object-cover" />
+                  <div id="previewExtraBadge" class="hidden absolute bottom-2 right-2 bg-black/75 px-2 py-1 rounded text-[11px] font-bold text-white">+0 şəkil</div>
+                </div>
 
-            <!-- Embed Description -->
-            <p id="previewDescription" class="text-xs text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
-              Postun təsviri və mətni burada real vaxt rejimində əks olunacaq.
-            </p>
-
-            <!-- Embed Image Gallery Preview -->
-            <div id="previewImageGallery" class="space-y-2">
-              <div class="w-full aspect-video bg-[#111214] rounded-lg border border-borderDark flex items-center justify-center text-gray-500 text-xs overflow-hidden">
-                <img id="previewPrimaryImg" src="" alt="Preview" class="hidden w-full h-full object-cover" />
-                <span id="previewPlaceholderText">🖼️ Şəkil seçildikdə burada görünəcək</span>
+                <div class="text-[11px] text-slate-400 pt-2 border-t border-white/5 flex items-center justify-between">
+                  <span>Abi Post Sistemi</span>
+                  <span id="previewDateStr">29.10.2026</span>
+                </div>
               </div>
-              <div id="previewExtraCount" class="hidden text-[11px] text-gray-400 text-right">
-                + <span id="extraCountNum">0</span> əlavə şəkil qalereya kimi göndəriləcək
+
+              <!-- Discord Interactive Buttons -->
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                <a
+                  id="previewLinkBtn"
+                  href="#"
+                  target="_blank"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand text-white font-medium text-xs hover:bg-brandHover transition pointer-events-none"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  <span>Daxil ol</span>
+                </a>
               </div>
             </div>
-
-            <!-- Embed Footer -->
-            <div class="flex items-center gap-2 text-[10px] text-gray-400 border-t border-white/5 pt-2">
-              <span>Abi Bot Admin Panel</span>
-              <span>•</span>
-              <span id="previewTimestamp">Canlı Vaxt</span>
-            </div>
           </div>
-
-          <!-- Link Button Simulation -->
-          <div class="pt-1">
-            <a
-              id="previewButton"
-              href="#"
-              target="_blank"
-              class="inline-flex items-center gap-1.5 px-4 py-2 bg-discordBtn hover:bg-[#5d6069] text-white text-xs font-semibold rounded transition shadow-sm"
-            >
-              <span>Open</span>
-              <svg class="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-              </svg>
-            </a>
-          </div>
-        </div>
-
-        <div class="bg-cardBg border border-borderDark rounded-xl p-4 text-xs text-gray-400 space-y-1.5">
-          <div class="font-semibold text-gray-300 flex items-center gap-1.5">
-            <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-            Avtomatik Həcm və Sıxılma Qaydası:
-          </div>
-          <p>Şəkillərin ümumi həcmi server limitini (90% effektiv hədd) aşdıqda Pillow avtomatik olaraq ölçüləri və keyfiyyəti proporsional tənzimləyir və lazım olduqda şəkilləri paketlərə bölərək göndərir.</p>
         </div>
       </div>
     </div>
 
-    <!-- TAB 2: POST HISTORY -->
+    <!-- ==================== TAB 2: POSTS HISTORY ==================== -->
     <div id="tabContentHistory" class="hidden space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="glass-card border border-borderDark rounded-2xl p-6 flex items-center justify-between">
         <div>
-          <h2 class="text-lg font-bold text-white">📜 Paylaşım Tarixçəsi</h2>
-          <p class="text-xs text-gray-400 mt-0.5">Son göndərilmiş və ya planlaşdırılmış postların siyahısı</p>
+          <h2 class="text-base font-bold text-white">Göndərilmiş və Planlaşdırılmış Postlar</h2>
+          <p class="text-xs text-slate-400">Verilənlər bazasındakı bütün paylaşımların statusu və idarə olunması</p>
         </div>
-        <button
-          onclick="loadHistory()"
-          class="flex items-center gap-1.5 text-xs bg-cardBg hover:bg-borderDark px-3.5 py-2 rounded-xl border border-borderDark transition text-gray-200 cursor-pointer"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-          </svg>
-          Yenilə
-        </button>
+        <button onclick="loadHistory()" class="text-xs px-3.5 py-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
       </div>
 
-      <!-- History Table / Cards -->
-      <div class="bg-cardBg border border-borderDark rounded-2xl overflow-hidden shadow-xl">
+      <div class="glass-card border border-borderDark rounded-2xl overflow-hidden shadow-xl">
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-cardHeader border-b border-borderDark text-gray-400 uppercase tracking-wider">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-cardHeader text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
               <tr>
-                <th class="px-5 py-3.5">ID & Tarix</th>
-                <th class="px-5 py-3.5">Başlıq & Link</th>
-                <th class="px-5 py-3.5">Kanal</th>
-                <th class="px-5 py-3.5">Status</th>
-                <th class="px-5 py-3.5">Şəkil Sayı</th>
-                <th class="px-5 py-3.5 text-right">Əməliyyatlar</th>
+                <th class="px-5 py-4">ID / Tarix</th>
+                <th class="px-5 py-4">Başlıq & Link</th>
+                <th class="px-5 py-4">Kanal</th>
+                <th class="px-5 py-4">Status</th>
+                <th class="px-5 py-4">Şəkillər</th>
+                <th class="px-5 py-4 text-right">Əməliyyatlar</th>
               </tr>
             </thead>
-            <tbody id="historyTableBody" class="divide-y divide-borderDark/60">
+            <tbody id="historyTableBody" class="divide-y divide-borderDark/40">
               <tr>
-                <td colspan="6" class="px-5 py-8 text-center text-gray-500">
-                  Məlumatlar yüklənir...
-                </td>
+                <td colspan="6" class="px-5 py-8 text-center text-slate-500">Tarixçə yüklənir...</td>
               </tr>
             </tbody>
           </table>
@@ -393,33 +472,206 @@
       </div>
     </div>
 
-    <div id="tabContentModeration" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <section class="lg:col-span-5 bg-cardBg border border-borderDark rounded-2xl p-6 space-y-5">
-        <div><h2 class="text-lg font-bold text-white">Server moderasiyası</h2><p class="text-xs text-gray-400 mt-1">Əməliyyatlar botun Discord icazələri ilə icra olunur.</p></div>
-        <div><label class="block text-xs text-gray-400 mb-1">Server</label><select id="modGuildSelect" onchange="loadModerationMembers()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></select></div>
-        <div><label class="block text-xs text-gray-400 mb-1">Üzv axtar</label><input id="modMemberSearch" oninput="scheduleMemberSearch()" placeholder="Ad, username və ya ID" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
-        <div id="modMemberWrap"><label class="block text-xs text-gray-400 mb-1">Üzv</label><select id="modMemberSelect" onchange="loadWarnings()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></select></div>
-        <div id="modUnbanWrap" class="hidden"><label class="block text-xs text-gray-400 mb-1">Banlı istifadəçinin Discord ID-si</label><input id="modUnbanId" inputmode="numeric" placeholder="Discord User ID" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
-        <div><label class="block text-xs text-gray-400 mb-1">Əməliyyat</label><select id="modAction" onchange="updateModerationForm()" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"><option value="warn">Xəbərdarlıq (warn)</option><option value="timeout">Timeout ver</option><option value="untimeout">Timeout-u aç</option><option value="kick">Serverdən çıxar (kick)</option><option value="ban">Ban et</option><option value="unban">Banı aç</option></select></div>
-        <div id="modDurationWrap" class="hidden"><label class="block text-xs text-gray-400 mb-1">Timeout müddəti (dəqiqə, max 40320)</label><input id="modDuration" type="number" min="1" max="40320" value="10" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm" /></div>
-        <div><label class="block text-xs text-gray-400 mb-1">Səbəb</label><textarea id="modReason" maxlength="500" rows="3" placeholder="Səbəb qeyd et" class="w-full rounded-lg bg-[#111319] border border-borderDark p-3 text-sm"></textarea></div>
-        <button onclick="submitModerationAction()" class="w-full rounded-lg bg-brand hover:bg-brandHover p-3 text-sm font-semibold text-white">Əməliyyatı icra et</button>
-        <p id="modFeedback" class="text-sm text-gray-300"></p>
-      </section>
-      <section class="lg:col-span-7 bg-cardBg border border-borderDark rounded-2xl p-6">
-        <div class="flex items-center justify-between"><div><h2 class="text-lg font-bold text-white">Xəbərdarlıq tarixçəsi</h2><p id="warningTotal" class="text-xs text-gray-400 mt-1">Üzv seç</p></div><button onclick="loadWarnings()" class="rounded-lg bg-cardHeader border border-borderDark px-3 py-2 text-xs">Yenilə</button></div>
-        <div id="warningHistory" class="mt-5 space-y-3 text-sm text-gray-300">Üzv seçiləndə tarixçə burada görünür.</div>
-      </section>
+    <!-- ==================== TAB 3: MODERATION & ROLES ==================== -->
+    <div id="tabContentModeration" class="hidden space-y-6">
+      <!-- Top Filters -->
+      <div class="glass-card border border-borderDark rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Server Seçin</label>
+          <select id="modGuildSelect" onchange="onModerationGuildChange()" class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv Axtar</label>
+          <input id="modMemberSearch" oninput="scheduleMemberSearch()" placeholder="Ad, ləqəb və ya Discord ID..." class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv Seçin</label>
+          <select id="modMemberSelect" onchange="onModerationMemberChange()" class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Moderation Actions Form -->
+        <div class="lg:col-span-5 glass-card border border-borderDark rounded-2xl p-6 space-y-5">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span>🛡️ Moderasiya Tədbirləri</span>
+          </h2>
+
+          <div id="modUnbanWrap" class="hidden">
+            <label class="block text-xs text-slate-400 mb-1">Banlı İstifadəçi ID-si</label>
+            <input id="modUnbanId" inputmode="numeric" placeholder="18 rəqəmli Discord User ID" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Cəza / Tədbir Növü</label>
+            <select id="modAction" onchange="updateModerationForm()" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white">
+              <option value="warn">⚠️ Xəbərdarlıq (Warn)</option>
+              <option value="timeout">⏳ Timeout (Mute)</option>
+              <option value="untimeout">🔓 Timeout-u aç</option>
+              <option value="kick">👢 Serverdən çıxar (Kick)</option>
+              <option value="ban">🔨 Qadağan et (Ban)</option>
+              <option value="unban">✨ Banı aç (Unban)</option>
+            </select>
+          </div>
+
+          <div id="modDurationWrap" class="hidden">
+            <label class="block text-xs text-slate-400 mb-1">Müddət (dəqiqə ilə, max 40320)</label>
+            <input id="modDuration" type="number" min="1" max="40320" value="10" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
+          </div>
+
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Səbəb</label>
+            <textarea id="modReason" rows="3" maxlength="500" placeholder="Qayda pozuntusunun səbəbi..." class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></textarea>
+          </div>
+
+          <button onclick="submitModerationAction()" class="w-full py-3 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg transition">
+            Əməliyyatı İcra Et
+          </button>
+          <p id="modFeedback" class="text-xs text-slate-400 text-center"></p>
+        </div>
+
+        <!-- Member Profile & Role Management -->
+        <div class="lg:col-span-7 space-y-6">
+          <!-- Member Quick Info Card -->
+          <div id="memberProfileCard" class="glass-card border border-borderDark rounded-2xl p-5 flex items-center gap-4">
+            <div id="memberAvatarWrap" class="w-16 h-16 rounded-2xl bg-cardHeader overflow-hidden flex-shrink-0 border border-white/10 flex items-center justify-center text-xl font-bold text-slate-400">
+              ?
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 id="memberName" class="text-base font-bold text-white truncate">Üzv seçilməyib</h3>
+              <p id="memberTag" class="text-xs text-slate-400 truncate">Məlumatları görmək üçün yuxarıdan üzv seçin</p>
+              <div id="memberDates" class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-3"></div>
+            </div>
+          </div>
+
+          <!-- Roles Manager -->
+          <div class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">İstifadəçinin Rolları (Veb İdarəetmə)</h3>
+                <p class="text-xs text-slate-400">Rolu əlavə etmək və ya silmək üçün birbaşa üzərinə klikləyin</p>
+              </div>
+              <button onclick="loadUserRoles()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+            </div>
+            <div id="memberRolesContainer" class="flex flex-wrap gap-2 pt-2">
+              <span class="text-xs text-slate-500">Üzv seçildikdən sonra rollar burada açılacaq.</span>
+            </div>
+          </div>
+
+          <!-- Warnings History -->
+          <div class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">Xəbərdarlıq Tarixçəsi</h3>
+                <p id="warningTotal" class="text-xs text-slate-400">Üzv seçin</p>
+              </div>
+              <button onclick="loadWarnings()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+            </div>
+            <div id="warningHistory" class="space-y-2.5 text-xs text-slate-300 max-h-64 overflow-y-auto pr-1">
+              Üzv seçiləndə xəbərdarlıqlar burada görünür.
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- ==================== TAB 4: SERVER STRUCTURE ==================== -->
+    <div id="tabContentStructure" class="hidden space-y-6">
+      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-white">Server Kanalları və Strukturu</h2>
+          <p class="text-xs text-slate-400">Serverdəki kateqoriyalar, mətn/səs kanalları və icazə iyerarxiyası</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <select id="structureGuildSelect" onchange="loadServerStructure()" class="px-3 py-2 bg-[#0c0e14] border border-borderDark rounded-xl text-xs text-white"></select>
+          <button onclick="loadServerStructure()" class="text-xs px-3 py-2 rounded-lg bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+        </div>
+      </div>
+
+      <div id="structureTreeContainer" class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+        <div class="text-center text-slate-500 py-8 text-sm">Server strukturu yüklənir...</div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 5: BOT GUIDES & COMMANDS ==================== -->
+    <div id="tabContentBots" class="hidden space-y-6">
+      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-white">Rəsmi Bot Sənədləri və Komandaları</h2>
+          <p class="text-xs text-slate-400">Serverinizdə olan Carl, MEE6, Dyno və digər botların rəsmi komanda bələdçiləri</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <select id="botsGuildSelect" onchange="loadGuildBots()" class="px-3 py-2 bg-[#0c0e14] border border-borderDark rounded-xl text-xs text-white"></select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Bots list in Guild -->
+        <div class="lg:col-span-4 glass-card border border-borderDark rounded-2xl p-5 space-y-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Serverdəki Botlar</h3>
+          <div id="guildBotsList" class="space-y-2 max-h-[600px] overflow-y-auto">
+            <div class="text-xs text-slate-500 p-2">Server seçin...</div>
+          </div>
+        </div>
+
+        <!-- Bot Command Details -->
+        <div class="lg:col-span-8 glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+          <div class="flex items-center justify-between border-b border-borderDark pb-3">
+            <div>
+              <h3 id="botGuideName" class="text-base font-bold text-white">Bot Seçilməyib</h3>
+              <p id="botGuideDesc" class="text-xs text-slate-400">Soldakı siyahıdan bot seçərək rəsmi komandalarını oxuya bilərsiniz</p>
+            </div>
+            <a id="botGuideLink" href="#" target="_blank" class="hidden text-xs text-indigo-400 hover:underline flex items-center gap-1">
+              <span>Rəsmi Sənədlər</span>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+          </div>
+
+          <div id="botCommandsContainer" class="space-y-2.5 max-h-[500px] overflow-y-auto">
+            <div class="text-xs text-slate-500 py-12 text-center">Komandaları görmək üçün bot seçin.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <section id="tabContentLogs" class="hidden space-y-6">
+      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+        <div><h2 class="text-lg font-bold text-white">Hadisə mərkəzi</h2><p class="text-xs text-slate-400 mt-1">Hər hadisəni ayrıca aktiv edin və öz Discord kanalına yönləndirin. Kanal boşdursa, yalnız arxivə yazılır.</p></div>
+        <select id="logsGuildSelect" onchange="loadLogSettings()" class="px-3 py-2 rounded-xl text-sm min-w-56"><option>Serverlər yüklənir...</option></select>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="logSummary"></div>
+      <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+        <div class="flex items-center justify-between"><div><h3 class="font-bold text-white">Log marşrutları</h3><p class="text-xs text-slate-400">Hadisə növü üçün kanal və aktivlik seçin.</p></div><button onclick="saveLogSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm">Sazlamaları yadda saxla</button></div>
+        <div id="logSettingsGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"><p class="text-sm text-slate-500">Server seçin.</p></div>
+      </div>
+      <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+        <div><h3 class="font-bold text-white">Arxiv və analitika</h3><p class="text-xs text-slate-400">Tarix aralığını seçib hadisələrdə axtarış edin.</p></div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <input id="logsStart" type="date" class="px-3 py-2 text-sm" />
+          <input id="logsEnd" type="date" class="px-3 py-2 text-sm" />
+          <select id="logsEventFilter" class="px-3 py-2 text-sm"><option value="">Bütün hadisələr</option></select>
+          <input id="logsSearch" placeholder="Üzv, icraçı, detal..." class="px-3 py-2 text-sm" />
+          <button onclick="loadLogsData()" class="px-4 py-2 rounded-xl bg-cardHeader border border-borderDark text-sm">Axtar / yenilə</button>
+        </div>
+        <div class="grid lg:grid-cols-3 gap-4">
+          <div class="lg:col-span-2 rounded-xl border border-borderDark p-4"><h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Hadisələr üzrə say</h4><div id="logAnalytics" class="space-y-2 text-sm text-slate-300">Tarix seçin.</div></div>
+          <div class="rounded-xl border border-borderDark p-4"><h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Ən çox dəvət edənlər</h4><div id="logInviters" class="space-y-2 text-sm text-slate-300">Məlumat yoxdur.</div></div>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-borderDark"><table class="w-full text-left text-sm"><thead class="bg-cardHeader text-xs uppercase text-slate-400"><tr><th class="p-3">Vaxt</th><th class="p-3">Hadisə</th><th class="p-3">İcraçı / üzv</th><th class="p-3">Detallar</th></tr></thead><tbody id="logsArchive"><tr><td colspan="4" class="p-6 text-center text-slate-500">Arxiv yüklənməyib.</td></tr></tbody></table></div>
+      </div>
+    </section>
+
   </main>
 
   <script>
     let globalCsrfToken = "";
     let selectedFilesCache = [];
+    let memberSearchTimer = null;
+    let currentTab = "overview";
 
-    // Initialize Page
     document.addEventListener("DOMContentLoaded", async () => {
       await fetchSessionInfo();
+      await loadSystemStats();
       await fetchChannels();
       await loadModerationGuilds();
       updateLivePreview();
@@ -435,13 +687,160 @@
         const data = await res.json();
         if (data.success && data.csrf_token) {
           globalCsrfToken = data.csrf_token;
-          document.getElementById("csrfToken").value = data.csrf_token;
+          const el = document.getElementById("csrfToken");
+          if (el) el.value = data.csrf_token;
         }
       } catch (err) {
-        console.error("Session info error:", err);
+        console.error("Session error:", err);
       }
     }
 
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabs = ["overview", "create", "history", "moderation", "structure", "bots", "logs"];
+      tabs.forEach(t => {
+        const content = document.getElementById("tabContent" + capitalize(t));
+        const btn = document.getElementById("tabBtn" + capitalize(t));
+        if (content) content.classList.toggle("hidden", t !== tab);
+        if (btn) {
+          btn.className = (t === tab)
+            ? "tab-active px-4 py-3 flex items-center gap-2 whitespace-nowrap transition"
+            : "tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition";
+        }
+      });
+
+      if (tab === "overview") loadSystemStats();
+      else if (tab === "history") loadHistory();
+      else if (tab === "structure") loadStructureGuilds();
+      else if (tab === "bots") loadBotsGuilds();
+      else if (tab === "logs") loadLogGuilds();
+    }
+
+    function capitalize(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    function refreshCurrentTab() {
+      const icon = document.getElementById("refreshIcon");
+      if (icon) icon.classList.add("animate-spin");
+      setTimeout(() => { if (icon) icon.classList.remove("animate-spin"); }, 1000);
+
+      if (currentTab === "overview") loadSystemStats();
+      else if (currentTab === "create") fetchChannels();
+      else if (currentTab === "history") loadHistory();
+      else if (currentTab === "moderation") { loadModerationGuilds(); onModerationMemberChange(); }
+      else if (currentTab === "structure") loadServerStructure();
+      else if (currentTab === "bots") loadGuildBots();
+      else if (currentTab === "logs") loadLogsData();
+    }
+
+    const logLabels = {};
+    async function loadLogGuilds() {
+      const select = document.getElementById("logsGuildSelect");
+      if (!select || select.options.length > 1) { await loadLogSettings(); return; }
+      try {
+        const res = await fetch("/admin/api/moderation/guilds"); const data = await res.json();
+        if (!data.success || !data.guilds?.length) { select.innerHTML = '<option value="">Server tapılmadı</option>'; return; }
+        select.innerHTML = data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+        await loadLogSettings();
+      } catch (e) { select.innerHTML = '<option value="">Serverlər yüklənmədi</option>'; }
+    }
+    async function loadLogSettings() {
+      const guildId = document.getElementById("logsGuildSelect")?.value;
+      if (!guildId) return;
+      const box = document.getElementById("logSettingsGrid"); box.innerHTML = '<p class="text-sm text-slate-500">Yüklənir...</p>';
+      try {
+        const data = await (await fetch(`/admin/api/logs/settings?guild_id=${encodeURIComponent(guildId)}`)).json();
+        if (!data.success) throw new Error(data.error || "Yükləmə alınmadı");
+        window.logEventData = data.events; window.logChannelData = data.channels;
+        const groups = [...new Set(data.events.map(e => e.group))];
+        box.innerHTML = groups.map(group => `<div class="rounded-xl border border-borderDark p-3 space-y-2"><h4 class="text-xs font-bold uppercase tracking-wider text-indigo-300">${escapeHtml(group)}</h4>${data.events.filter(e => e.group === group).map(e => {
+          logLabels[e.key] = e.label;
+          const options = `<option value="">Yalnız arxiv</option>` + data.channels.map(c => `<option value="${c.id}" ${String(e.channel_id||"")===String(c.id)?"selected":""}>#${escapeHtml(c.name)}${c.category?" · "+escapeHtml(c.category):""}</option>`).join("");
+          return `<div class="bg-[#0c0e14] rounded-lg p-2.5 space-y-2"><div class="flex items-center justify-between gap-2"><span class="text-xs text-slate-200">${escapeHtml(e.label)}</span><label class="relative inline-flex items-center cursor-pointer"><input data-log-enabled="${e.key}" type="checkbox" ${e.enabled?"checked":""} class="sr-only peer"><span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-600 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></span></label></div><select data-log-channel="${e.key}" class="w-full px-2 py-1.5 text-xs">${options}</select></div>`;
+        }).join("")}</div>`).join("");
+        const filter = document.getElementById("logsEventFilter");
+        filter.innerHTML = '<option value="">Bütün hadisələr</option>' + data.events.map(e => `<option value="${e.key}">${escapeHtml(e.label)}</option>`).join("");
+        await loadLogsData();
+      } catch (e) { box.innerHTML = `<p class="text-sm text-rose-300">${escapeHtml(e.message)}</p>`; }
+    }
+    async function saveLogSettings() {
+      const guildId = document.getElementById("logsGuildSelect").value;
+      const events = [...(window.logEventData||[])].map(e => ({key:e.key, enabled:!!document.querySelector(`[data-log-enabled="${e.key}"]`)?.checked, channel_id:document.querySelector(`[data-log-channel="${e.key}"]`)?.value||null}));
+      try {
+        const res = await fetch("/admin/api/logs/settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({guild_id:guildId, events, csrf_token:globalCsrfToken})});
+        const data = await res.json(); if (!data.success) throw new Error(data.error||"Saxlanmadı"); showToast(data.message||"Sazlamalar saxlandı", "success");
+      } catch(e) { showToast(e.message, "error"); }
+    }
+    async function loadLogsData() {
+      const guildId = document.getElementById("logsGuildSelect")?.value; if (!guildId) return;
+      const startDate = document.getElementById("logsStart").value, endDate = document.getElementById("logsEnd").value;
+      const start = startDate ? `${startDate}T00:00:00+00:00` : "";
+      const end = endDate ? `${endDate}T23:59:59.999999+00:00` : "";
+      const params = new URLSearchParams({guild_id:guildId, start, end, event:document.getElementById("logsEventFilter").value, q:document.getElementById("logsSearch").value, limit:"100"});
+      try {
+        const [ar, an] = await Promise.all([fetch(`/admin/api/logs/events?${params}`), fetch(`/admin/api/logs/analytics?guild_id=${guildId}&start=${start}&end=${end}`)]);
+        const archive = await ar.json(), analytics = await an.json();
+        if (!archive.success) throw new Error(archive.error||"Arxiv oxunmadı");
+        const counts = Object.fromEntries((analytics.by_event||[]).map(x=>[x.event_key, Number(x.count)]));
+        const total = Object.values(counts).reduce((a,b)=>a+b,0); const join = counts.member_join||0; const leave = counts.member_leave||0;
+        document.getElementById("logSummary").innerHTML = [["Nəticə",total],["Giriş",join],["Çıxış",leave],["Bu səhifə",archive.events.length]].map(x=>`<div class="glass-card rounded-xl p-4"><p class="text-xs text-slate-400">${x[0]}</p><p class="text-2xl font-black text-indigo-300">${x[1].toLocaleString()}</p></div>`).join("");
+        document.getElementById("logsArchive").innerHTML = archive.events.length ? archive.events.map(e=>`<tr><td class="p-3 whitespace-nowrap text-xs text-slate-400">${new Date(e.created_at).toLocaleString()}</td><td class="p-3 font-semibold text-slate-200">${escapeHtml(logLabels[e.event_key]||e.event_key)}</td><td class="p-3 text-xs">${escapeHtml(e.actor_name||"—")} ${e.target_name?`→ ${escapeHtml(e.target_name)}`:""}</td><td class="p-3 text-xs text-slate-400">${escapeHtml(Object.entries(e.details||{}).map(([k,v])=>`${k}: ${typeof v==="object"?JSON.stringify(v):v}`).join(" · ").slice(0,600)||e.title)}</td></tr>`).join("") : '<tr><td colspan="4" class="p-6 text-center text-slate-500">Bu filtr üçün hadisə yoxdur.</td></tr>';
+        if (analytics.success) {
+          document.getElementById("logAnalytics").innerHTML = analytics.by_event.length ? analytics.by_event.map(x=>`<div class="flex items-center justify-between gap-3"><span>${escapeHtml(logLabels[x.event_key]||x.event_key)}</span><span class="font-mono text-indigo-300">${x.count}</span></div>`).join("") : "Hadisə yoxdur.";
+          document.getElementById("logInviters").innerHTML = analytics.top_inviters.length ? analytics.top_inviters.map((x,i)=>`<div class="flex items-center justify-between gap-2"><span>${i+1}. ${escapeHtml(x.actor_name||"Naməlum")}</span><b class="text-emerald-300">${x.count}</b></div>`).join("") : "Məlumat yoxdur.";
+        }
+      } catch(e) { document.getElementById("logsArchive").innerHTML = `<tr><td colspan="4" class="p-5 text-rose-300">${escapeHtml(e.message)}</td></tr>`; }
+    }
+    /* ==================== OVERVIEW & SYSTEM STATS ==================== */
+    async function loadSystemStats() {
+      try {
+        const res = await fetch("/admin/api/stats");
+        const data = await res.json();
+        if (!data.success) return;
+
+        const b = data.bot;
+        document.getElementById("statGuilds").innerText = b.guilds_count;
+        document.getElementById("statUsers").innerText = b.total_members.toLocaleString();
+        document.getElementById("statVoice").innerText = `${b.voice_members} səsli otaqda`;
+        document.getElementById("statChannels").innerText = `${b.total_channels} kanal`;
+        document.getElementById("statScheduled").innerText = `${b.scheduled_count} planlaşdırılıb`;
+        document.getElementById("statRam").innerText = `${b.memory_mb} MB`;
+        document.getElementById("pingBadge").innerText = `${b.latency_ms} ms`;
+
+        // Format Uptime
+        const up = b.uptime_seconds;
+        const d = Math.floor(up / 86400);
+        const h = Math.floor((up % 86400) / 3600);
+        const m = Math.floor((up % 3600) / 60);
+        document.getElementById("statUptime").innerText = `Uptime: ${d ? d + "g " : ""}${h}s ${m}d`;
+
+        // Render Guilds Grid
+        const grid = document.getElementById("overviewGuildsGrid");
+        if (data.guilds && data.guilds.length) {
+          grid.innerHTML = data.guilds.map(g => `
+            <div class="glass-panel p-4 rounded-xl flex items-center justify-between border border-borderDark hover:border-indigo-500/40 transition">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-11 h-11 rounded-xl bg-cardHeader border border-white/5 overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-slate-300">
+                  ${g.icon ? `<img src="${g.icon}" class="w-full h-full object-cover"/>` : escapeHtml(g.name.slice(0, 2))}
+                </div>
+                <div class="min-w-0">
+                  <h4 class="text-sm font-bold text-white truncate">${escapeHtml(g.name)}</h4>
+                  <p class="text-xs text-slate-400">${g.members.toLocaleString()} üzv · ${g.channels} kanal</p>
+                </div>
+              </div>
+              <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Aktiv</span>
+            </div>
+          `).join("");
+        } else {
+          grid.innerHTML = '<div class="text-sm text-slate-500 col-span-full py-4 text-center">Bot hələ heç bir serverə qoşulmayıb.</div>';
+        }
+      } catch (err) {
+        console.error("Stats error:", err);
+      }
+    }
+
+    /* ==================== CREATE POST & LIVE PREVIEW ==================== */
     async function fetchChannels() {
       const select = document.getElementById("channelSelect");
       try {
@@ -462,470 +861,186 @@
       }
     }
 
-    function switchTab(tab) {
-      const tabCreate = document.getElementById("tabContentCreate");
-      const tabHistory = document.getElementById("tabContentHistory");
-      const tabModeration = document.getElementById("tabContentModeration");
-      const btnCreate = document.getElementById("tabBtnCreate");
-      const btnHistory = document.getElementById("tabBtnHistory");
-      const btnModeration = document.getElementById("tabBtnModeration");
-      [tabCreate, tabHistory, tabModeration].forEach(el => el.classList.add("hidden"));
-      [btnCreate, btnHistory, btnModeration].forEach(el => el.className = "pb-3 text-gray-400 hover:text-gray-200 flex items-center gap-2 border-b-2 border-transparent");
+    function updateLivePreview() {
+      const title = document.getElementById("postTitle").value.trim();
+      const desc = document.getElementById("postDescription").value.trim();
+      const link = document.getElementById("postLink").value.trim();
 
-      if (tab === 'create') {
-        tabCreate.classList.remove("hidden");
-        btnCreate.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
-      } else if (tab === 'history') {
-        tabHistory.classList.remove("hidden");
-        btnHistory.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
-        loadHistory();
+      document.getElementById("charCount").innerText = `${desc.length} / 4000`;
+      document.getElementById("previewTitle").innerText = title || "Başlıq burada görünəcək";
+      document.getElementById("previewDesc").innerText = desc || "Açıqlama mətni burada nümayiş olunacaq...";
+
+      const wrap = document.getElementById("previewMediaWrap");
+      const img = document.getElementById("previewMediaImg");
+      const badge = document.getElementById("previewExtraBadge");
+
+      if (selectedFilesCache.length > 0) {
+        wrap.classList.remove("hidden");
+        img.src = getFileUrl(selectedFilesCache[0]);
+        if (selectedFilesCache.length > 1) {
+          badge.classList.remove("hidden");
+          badge.innerText = `+${selectedFilesCache.length - 1} şəkil`;
+        } else {
+          badge.classList.add("hidden");
+        }
       } else {
-        tabModeration.classList.remove("hidden");
-        btnModeration.className = "pb-3 text-brand border-b-2 border-brand flex items-center gap-2";
-        loadModerationGuilds();
+        wrap.classList.add("hidden");
       }
-    }
 
-    let memberSearchTimer = null;
-
-    async function loadModerationGuilds() {
-      const select = document.getElementById("modGuildSelect");
-      try {
-        const response = await fetch("/admin/api/moderation/guilds");
-        const data = await response.json();
-        if (!data.success) { document.getElementById("modFeedback").textContent = data.error || "Serverlər yüklənmədi."; return; }
-        const previous = select.value;
-        select.innerHTML = '<option value="">Server seç</option>' + data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
-        if (data.guilds.some(g => g.id === previous)) select.value = previous;
-        else if (data.guilds.length === 1) select.value = data.guilds[0].id;
-        if (select.value) await loadModerationMembers();
-      } catch (_) { document.getElementById("modFeedback").textContent = "Moderasiya API-yə qoşulmaq mümkün olmadı."; }
-    }
-
-    function scheduleMemberSearch() {
-      clearTimeout(memberSearchTimer);
-      memberSearchTimer = setTimeout(loadModerationMembers, 250);
-    }
-
-    async function loadModerationMembers() {
-      const guildId = document.getElementById("modGuildSelect").value;
-      const select = document.getElementById("modMemberSelect");
-      if (!guildId) { select.innerHTML = '<option value="">Əvvəl server seç</option>'; return; }
-      const query = document.getElementById("modMemberSearch").value.trim();
-      try {
-        const response = await fetch(`/admin/api/moderation/members?guild_id=${encodeURIComponent(guildId)}&q=${encodeURIComponent(query)}`);
-        const data = await response.json();
-        if (!data.success) { select.innerHTML = `<option value="">${escapeHtml(data.error || "Üzvlər yüklənmədi")}</option>`; return; }
-        select.innerHTML = '<option value="">Üzv seç</option>' + data.members.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (@${escapeHtml(m.username)}) · ${m.id}</option>`).join("");
-        if (data.members.length === 1) { select.value = data.members[0].id; loadWarnings(); }
-        else { document.getElementById("warningTotal").textContent = "Üzv seç"; document.getElementById("warningHistory").textContent = "Üzv seçiləndə tarixçə burada görünür."; }
-      } catch (_) { select.innerHTML = '<option value="">Üzvlər yüklənmədi</option>'; }
-    }
-
-    async function loadWarnings() {
-      const guildId = document.getElementById("modGuildSelect").value;
-      const userId = document.getElementById("modMemberSelect").value;
-      const total = document.getElementById("warningTotal");
-      const root = document.getElementById("warningHistory");
-      if (!guildId || !userId) { total.textContent = "Üzv seç"; root.textContent = "Üzv seçiləndə tarixçə burada görünür."; return; }
-      root.textContent = "Yüklənir...";
-      try {
-        const response = await fetch(`/admin/api/moderation/warnings?guild_id=${encodeURIComponent(guildId)}&user_id=${encodeURIComponent(userId)}`);
-        const data = await response.json();
-        if (!data.success) { root.textContent = data.error || "Tarixçə yüklənmədi."; return; }
-        total.textContent = `Ümumi xəbərdarlıq: ${data.total}`;
-        root.innerHTML = data.warnings.length ? data.warnings.map(w => `<article class="rounded-lg bg-[#111319] border border-borderDark p-3"><div class="flex justify-between text-xs text-gray-500"><span>#${w.id} · ${escapeHtml(w.date)}</span><span>Moderator ID: ${w.moderator_id == null ? "Admin panel" : escapeHtml(w.moderator_id)}</span></div><p class="mt-2">${escapeHtml(w.reason)}</p></article>`).join("") : '<p class="text-gray-500">Xəbərdarlıq yoxdur.</p>';
-      } catch (_) { root.textContent = "Xəbərdarlıq tarixçəsi yüklənmədi."; }
-    }
-
-    function updateModerationForm() {
-      const isUnban = document.getElementById("modAction").value === "unban";
-      document.getElementById("modUnbanWrap").classList.toggle("hidden", !isUnban);
-      document.getElementById("modMemberWrap").classList.toggle("hidden", isUnban);
-      document.getElementById("modMemberSearch").parentElement.classList.toggle("hidden", isUnban);
-      document.getElementById("modDurationWrap").classList.toggle("hidden", document.getElementById("modAction").value !== "timeout");
-    }
-
-    async function submitModerationAction() {
-      const action = document.getElementById("modAction").value;
-      const guildId = document.getElementById("modGuildSelect").value;
-      const userId = action === "unban" ? document.getElementById("modUnbanId").value.trim() : document.getElementById("modMemberSelect").value;
-      const feedback = document.getElementById("modFeedback");
-      if (!guildId || !/^\d{15,22}$/.test(userId)) { feedback.textContent = "Server və düzgün Discord istifadəçi ID-si seç və ya daxil et."; return; }
-      if (["kick", "ban"].includes(action) && !confirm(`${action === "ban" ? "Ban" : "Kick"} əməliyyatı təsdiqlənsin?`)) return;
-      const payload = {
-        action, guild_id: guildId, user_id: userId,
-        reason: document.getElementById("modReason").value.trim(),
-        minutes: document.getElementById("modDuration").value,
-        csrf_token: globalCsrfToken,
-      };
-      feedback.textContent = "Əməliyyat icra olunur...";
-      try {
-        const response = await fetch("/admin/api/moderation/action", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
-        const data = await response.json();
-        feedback.textContent = data.success ? data.message : (data.error || "Əməliyyat baş tutmadı.");
-        feedback.className = data.success ? "text-sm text-emerald-400" : "text-sm text-red-400";
-        if (data.success) {
-          if (action === "warn") await loadWarnings();
-          if (["kick", "ban"].includes(action)) await loadModerationMembers();
-          document.getElementById("modReason").value = "";
-        }
-      } catch (_) { feedback.textContent = "Sorğu göndərilərkən şəbəkə xətası oldu."; }
-    }
-
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[char]));
-    }
-
-    let uploadedFilesList = []; // Holds File objects in exact user order
-    let objectUrls = new Map(); // File -> blob URL
-    let pasteCounter = 1;
-
-    // Allowed image types
-    const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-
-    function getCombinedImageCount() {
-      return uploadedFilesList.length;
-    }
-
-    function updateCounter() {
-      const total = uploadedFilesList.length;
-      const counter = document.getElementById("imageCounter");
-      counter.innerText = `${total}/10`;
-      if (total >= 10) {
-        counter.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400";
+      const linkBtn = document.getElementById("previewLinkBtn");
+      if (link) {
+        linkBtn.href = link;
+        linkBtn.classList.remove("pointer-events-none", "opacity-50");
       } else {
-        counter.className = "text-xs font-bold px-2 py-0.5 rounded-full bg-brand/20 text-brand";
-      }
-    }
-
-    function addFilesToList(newFiles) {
-      let added = 0;
-      for (const file of newFiles) {
-        if (getCombinedImageCount() >= 10) {
-          showToast("Maksimum 10 şəkil limiti doldu! Digər şəkillər əlavə edilmədi.", "error");
-          break;
-        }
-
-        if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-          // Check extension
-          const ext = file.name.split('.').pop().toLowerCase();
-          if (!['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
-            showToast(`'${file.name}' dəstəklənməyən fayl formatıdır.`, "error");
-            continue;
-          }
-        }
-
-        uploadedFilesList.push(file);
-        added++;
-      }
-
-      if (added > 0) {
-        renderThumbnails();
-        updateCounter();
-        updateLivePreview();
+        linkBtn.classList.add("pointer-events-none", "opacity-50");
       }
     }
 
     function handleFileSelection(input) {
-      if (input.files && input.files.length > 0) {
-        addFilesToList(Array.from(input.files));
-      }
-      input.value = ""; // Reset so same file can be selected again
+      if (!input.files || input.files.length === 0) return;
+      addFilesToList(Array.from(input.files));
+      input.value = "";
     }
 
-    function removeFile(index) {
-      const file = uploadedFilesList[index];
-      if (file && objectUrls.has(file)) {
-        URL.revokeObjectURL(objectUrls.get(file));
-        objectUrls.delete(file);
+    function addFilesToList(newFiles) {
+      const maxFiles = 10;
+      const maxSize = 8 * 1024 * 1024;
+      for (const file of newFiles) {
+        if (selectedFilesCache.length >= maxFiles) {
+          showToast(`Maksimum ${maxFiles} şəkil əlavə edə bilərsiniz.`, "error");
+          break;
+        }
+        if (file.size > maxSize) {
+          showToast(`${file.name} 8MB-dan böyükdür!`, "error");
+          continue;
+        }
+        if (!selectedFilesCache.some(f => f.name === file.name && f.size === file.size)) {
+          selectedFilesCache.push(file);
+        }
       }
-      uploadedFilesList.splice(index, 1);
       renderThumbnails();
-      updateCounter();
       updateLivePreview();
     }
 
-    function clearAllFiles() {
-      for (const [file, url] of objectUrls.entries()) {
-        URL.revokeObjectURL(url);
-      }
-      objectUrls.clear();
-      uploadedFilesList = [];
+    function removeFile(index) {
+      selectedFilesCache.splice(index, 1);
       renderThumbnails();
-      updateCounter();
       updateLivePreview();
     }
 
     function getFileUrl(file) {
-      if (!objectUrls.has(file)) {
-        objectUrls.set(file, URL.createObjectURL(file));
-      }
-      return objectUrls.get(file);
+      return URL.createObjectURL(file);
     }
 
     function renderThumbnails() {
-      const container = document.getElementById("thumbnailContainer");
-      const grid = document.getElementById("thumbnailGrid");
-      const thumbCount = document.getElementById("thumbCount");
+      const container = document.getElementById("thumbnailsContainer");
+      const counter = document.getElementById("imageCounter");
+      counter.innerText = `${selectedFilesCache.length} / 10 ədəd`;
 
-      if (uploadedFilesList.length === 0) {
+      if (selectedFilesCache.length === 0) {
         container.classList.add("hidden");
-        grid.innerHTML = "";
+        container.innerHTML = "";
         return;
       }
 
       container.classList.remove("hidden");
-      thumbCount.innerText = uploadedFilesList.length;
-      grid.innerHTML = "";
-
-      uploadedFilesList.forEach((file, index) => {
-        const url = getFileUrl(file);
-        const card = document.createElement("div");
-        card.className = "relative group bg-cardBg border border-borderDark hover:border-brand/50 rounded-xl overflow-hidden aspect-square flex items-center justify-center cursor-move";
-        card.draggable = true;
-        card.dataset.index = index;
-
-        card.innerHTML = `
-          <img src="${url}" alt="${escapeHtml(file.name)}" class="w-full h-full object-cover pointer-events-none" />
-          <span class="absolute bottom-1 left-1 bg-black/70 text-[9px] text-gray-200 px-1 rounded truncate max-w-[80%]">${index + 1}. ${escapeHtml(file.name)}</span>
-          <button
-            type="button"
-            onclick="event.stopPropagation(); removeFile(${index})"
-            class="absolute top-1 right-1 w-5 h-5 bg-red-600/90 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs shadow transition active:scale-90"
-            title="Şəkli sil"
-          >&times;</button>
-        `;
-
-        // Drag & Drop reordering
-        card.addEventListener("dragstart", (e) => {
-          e.dataTransfer.setData("text/plain", index);
-          card.classList.add("opacity-50");
-        });
-        card.addEventListener("dragend", () => {
-          card.classList.remove("opacity-50");
-        });
-        card.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          card.classList.add("border-brand");
-        });
-        card.addEventListener("dragleave", () => {
-          card.classList.remove("border-brand");
-        });
-        card.addEventListener("drop", (e) => {
-          e.preventDefault();
-          card.classList.remove("border-brand");
-          const fromIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-          const toIndex = index;
-          if (!isNaN(fromIndex) && fromIndex !== toIndex) {
-            const movedItem = uploadedFilesList.splice(fromIndex, 1)[0];
-            uploadedFilesList.splice(toIndex, 0, movedItem);
-            renderThumbnails();
-            updateLivePreview();
-          }
-        });
-
-        grid.appendChild(card);
-      });
+      container.innerHTML = selectedFilesCache.map((file, i) => `
+        <div class="relative group aspect-square rounded-xl overflow-hidden bg-cardHeader border border-borderDark">
+          <img src="${getFileUrl(file)}" class="w-full h-full object-cover"/>
+          <button type="button" onclick="removeFile(${i})" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center text-xs shadow-md transition">
+            &times;
+          </button>
+        </div>
+      `).join("");
     }
-
-    // Drag and Drop files onto dropZone
-    const dropZone = document.getElementById("dropZone");
-    ['dragenter', 'dragover'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.add("border-brand", "bg-brand/5");
-      });
-    });
-    ['dragleave', 'drop'].forEach(eventName => {
-      dropZone.addEventListener(eventName, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.remove("border-brand", "bg-brand/5");
-      });
-    });
-    dropZone.addEventListener("drop", (e) => {
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        addFilesToList(Array.from(e.dataTransfer.files));
-      }
-    });
-
-    // Global Paste from Clipboard (Ctrl+V)
-    document.addEventListener("paste", (e) => {
-      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      if (!items) return;
-
-      const pastedFiles = [];
-      for (const item of items) {
-        if (item.type && item.type.startsWith("image/")) {
-          const blob = item.getAsFile();
-          if (blob) {
-            const ext = blob.type.split("/")[1] || "png";
-            const newName = `pasted-${Date.now()}-${pasteCounter++}.${ext}`;
-            const file = new File([blob], newName, { type: blob.type });
-            pastedFiles.push(file);
-          }
-        }
-      }
-
-      if (pastedFiles.length > 0) {
-        e.preventDefault(); // Prevent only when image is pasted, text paste continues normally
-        addFilesToList(pastedFiles);
-        showToast(`${pastedFiles.length} ədəd şəkil buferdən (Ctrl+V) əlavə edildi!`, "success");
-      }
-    });
-
-    function updateLivePreview() {
-      const title = document.getElementById("postTitle").value.trim() || "Post Başlığı Burada Görünəcək";
-      const desc = document.getElementById("postDescription").value.trim() || "Postun təsviri və mətni burada real vaxt rejimində əks olunacaq.";
-      const link = document.getElementById("postLink").value.trim() || "#";
-
-      document.getElementById("previewTitleLink").innerText = title;
-      document.getElementById("previewTitleLink").href = link !== "#" ? link : "javascript:void(0)";
-      document.getElementById("previewDescription").innerText = desc;
-      document.getElementById("previewButton").href = link !== "#" ? link : "javascript:void(0)";
-
-      const now = new Date();
-      document.getElementById("previewTimestamp").innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      const primaryImg = document.getElementById("previewPrimaryImg");
-      const placeholderText = document.getElementById("previewPlaceholderText");
-      const extraCount = document.getElementById("previewExtraCount");
-      const extraCountNum = document.getElementById("extraCountNum");
-
-      const totalImages = uploadedFilesList.length;
-
-      if (uploadedFilesList.length > 0) {
-        primaryImg.src = getFileUrl(uploadedFilesList[0]);
-        primaryImg.classList.remove("hidden");
-        placeholderText.classList.add("hidden");
-      } else {
-        primaryImg.src = "";
-        primaryImg.classList.add("hidden");
-        placeholderText.classList.remove("hidden");
-      }
-
-      if (totalImages > 1) {
-        extraCount.classList.remove("hidden");
-        extraCountNum.innerText = totalImages - 1;
-      } else {
-        extraCount.classList.add("hidden");
-      }
-    }
-
 
     // Submit Post Form
     document.getElementById("postForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-      const submitBtn = document.getElementById("btnSubmitPost");
-      const submitText = document.getElementById("btnSubmitText");
-
-      const totalImages = getCombinedImageCount();
-      if (totalImages > 10) {
-        showToast("Maksimum 10 şəkil icazəlidir! Artıq şəkilləri silin.", "error");
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitText.innerText = "Göndərilir...";
-
-      // Build FormData manually to ensure exact file order from uploadedFilesList
-      const formData = new FormData();
-      formData.append("csrf_token", globalCsrfToken);
-      formData.append("channel_id", document.getElementById("channelSelect").value);
-      formData.append("title", document.getElementById("postTitle").value.trim());
-      formData.append("description", document.getElementById("postDescription").value.trim());
-      formData.append("link_url", document.getElementById("postLink").value.trim());
-
-      // Append all selected files in exact order
-      for (const file of uploadedFilesList) {
-        formData.append("files", file, file.name);
-      }
+      const btn = document.getElementById("submitBtn");
+      const btnText = document.getElementById("submitBtnText");
+      btn.disabled = true;
+      btnText.innerText = "Göndərilir...";
 
       try {
+        const formData = new FormData(e.target);
+        formData.delete("images");
+        selectedFilesCache.forEach(file => formData.append("images", file));
+
         const res = await fetch("/admin/api/posts", {
           method: "POST",
           body: formData
         });
         const data = await res.json();
-
-        if (res.ok && data.success) {
-          showToast(data.message || "Post uğurla göndərildi!", "success");
-          // Reset form
-          document.getElementById("postTitle").value = "";
-          document.getElementById("postDescription").value = "";
-          document.getElementById("postLink").value = "";
-          clearAllFiles();
+        if (data.success) {
+          showToast(data.message || "Post uğurla paylaşıldı!", "success");
+          e.target.reset();
+          selectedFilesCache = [];
+          renderThumbnails();
           updateLivePreview();
+          switchTab("history");
         } else {
-          showToast(data.error || "Post göndərilərkən xəta baş verdi.", "error");
+          showToast(data.error || "Xəta baş verdi", "error");
         }
       } catch (err) {
-        showToast("Şəbəkə xətası baş verdi.", "error");
+        showToast("Şəbəkə xətası baş verdi", "error");
       } finally {
-        submitBtn.disabled = false;
-        submitText.innerText = "Postu Göndər";
+        btn.disabled = false;
+        btnText.innerText = "Discord Kanalına Paylaş";
       }
     });
 
-
-    // History Functions
+    /* ==================== POSTS HISTORY ==================== */
     async function loadHistory() {
       const tbody = document.getElementById("historyTableBody");
-      tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-gray-500">Yüklənir...</td></tr>';
-
       try {
         const res = await fetch("/admin/api/history");
         const data = await res.json();
+        if (!data.success) {
+          tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-8 text-center text-rose-400">${data.error || "Tarixçə alınmadı"}</td></tr>`;
+          return;
+        }
 
-        if (data.success && data.posts) {
-          if (data.posts.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-gray-500">Heç bir post qeydə alınmayıb.</td></tr>';
-            return;
+        if (!data.posts || data.posts.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-slate-500">Heç bir post tapılmadı.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.posts.map(p => {
+          let badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Paylaşıldı</span>`;
+          if (p.status === "scheduled") {
+            badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">Planlaşdırılıb</span>`;
+          } else if (p.status === "failed") {
+            badge = `<span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">Xəta</span>`;
           }
 
-          tbody.innerHTML = data.posts.map(p => {
-            let statusBadge = "";
-            if (p.status === "sent") {
-              statusBadge = '<span class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">Göndərildi</span>';
-            } else if (p.status === "scheduled") {
-              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium">Planlaşdırılıb: ${p.scheduled_time || ''}</span>`;
-            } else if (p.status === "failed") {
-              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-medium" title="${p.error_message || ''}">Uğursuz</span>`;
-            } else {
-              statusBadge = `<span class="px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 font-medium">${p.status}</span>`;
-            }
-
-            return `
-              <tr class="hover:bg-cardHeader/50 transition">
-                <td class="px-5 py-4">
-                  <span class="font-bold text-gray-300">#${p.id}</span>
-                  <div class="text-[11px] text-gray-500 mt-0.5">${p.created_at}</div>
-                </td>
-                <td class="px-5 py-4 max-w-xs">
-                  <div class="font-semibold text-white truncate">${escapeHtml(p.title)}</div>
-                  <a href="${escapeHtml(p.link_url)}" target="_blank" class="text-brand hover:underline text-[11px] truncate block">${escapeHtml(p.link_url)}</a>
-                </td>
-                <td class="px-5 py-4 text-gray-300">${escapeHtml(p.channel_name)}</td>
-                <td class="px-5 py-4">${statusBadge}</td>
-                <td class="px-5 py-4 text-gray-400">${p.image_count} ədəd</td>
-                <td class="px-5 py-4 text-right space-x-2">
-                  <button onclick="resendPost(${p.id})" class="text-xs text-brand hover:text-white bg-brand/10 hover:bg-brand px-2.5 py-1.5 rounded-lg border border-brand/20 transition cursor-pointer">Yenidən Göndər</button>
-                  <button onclick="deletePost(${p.id})" class="text-xs text-red-400 hover:text-white bg-red-500/10 hover:bg-red-600 px-2.5 py-1.5 rounded-lg border border-red-500/20 transition cursor-pointer">Sil</button>
-                </td>
-              </tr>
-            `;
-          }).join('');
-        }
+          return `
+            <tr class="hover:bg-cardHeader/40 transition">
+              <td class="px-5 py-4 font-mono text-xs">
+                <span class="font-bold text-white">#${p.id}</span>
+                <div class="text-[10px] text-slate-500">${p.created_at}</div>
+              </td>
+              <td class="px-5 py-4 max-w-xs">
+                <div class="font-semibold text-white truncate">${escapeHtml(p.title)}</div>
+                <a href="${escapeHtml(p.link_url)}" target="_blank" class="text-indigo-400 hover:underline text-[11px] truncate block">${escapeHtml(p.link_url)}</a>
+              </td>
+              <td class="px-5 py-4 text-xs text-slate-300">${escapeHtml(p.channel_name || "Bilinmir")}</td>
+              <td class="px-5 py-4">${badge}</td>
+              <td class="px-5 py-4 text-xs text-slate-400">${p.image_count || 0} ədəd</td>
+              <td class="px-5 py-4 text-right space-x-2">
+                <button onclick="resendPost(${p.id})" class="text-xs px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-600 hover:text-white transition">Yenidən Göndər</button>
+                <button onclick="deletePost(${p.id})" class="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white transition">Sil</button>
+              </td>
+            </tr>
+          `;
+        }).join("");
       } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-red-400">Tarixçə yüklənərkən xəta baş verdi.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-rose-400">Şəbəkə xətası baş verdi.</td></tr>';
       }
     }
 
     async function deletePost(postId) {
-      if (!confirm(`Post #${postId} bazadan və Discord-dan silinsin?`)) return;
-
+      if (!confirm(`Post #${postId} silinsin?`)) return;
       try {
         const res = await fetch("/admin/api/delete", {
           method: "POST",
@@ -934,19 +1049,14 @@
         });
         const data = await res.json();
         if (data.success) {
-          showToast(data.message, "success");
+          showToast("Post silindi", "success");
           loadHistory();
-        } else {
-          showToast(data.error || "Silinmədi", "error");
-        }
-      } catch (err) {
-        showToast("Şəbəkə xətası", "error");
-      }
+        } else showToast(data.error || "Silinmədi", "error");
+      } catch (_) { showToast("Xəta baş verdi", "error"); }
     }
 
     async function resendPost(postId) {
-      if (!confirm(`Post #${postId} yenidən Discord kanalına göndərilsin?`)) return;
-
+      if (!confirm(`Post #${postId} təkrar göndərilsin?`)) return;
       try {
         const res = await fetch("/admin/api/resend", {
           method: "POST",
@@ -955,16 +1065,383 @@
         });
         const data = await res.json();
         if (data.success) {
-          showToast(data.message, "success");
+          showToast("Post yenidən paylaşıldı", "success");
           loadHistory();
-        } else {
-          showToast(data.error || "Yenidən göndərilmədi", "error");
+        } else showToast(data.error || "Xəta", "error");
+      } catch (_) { showToast("Xəta baş verdi", "error"); }
+    }
+
+    /* ==================== MODERATION & ROLES ==================== */
+    async function loadModerationGuilds() {
+      const select = document.getElementById("modGuildSelect");
+      try {
+        const res = await fetch("/admin/api/moderation/guilds");
+        const data = await res.json();
+        if (!data.success) return;
+        select.innerHTML = '<option value="">Server seçin</option>' + data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+        if (data.guilds.length === 1) {
+          select.value = data.guilds[0].id;
+          await loadModerationMembers();
         }
-      } catch (err) {
+      } catch (_) {}
+    }
+
+    function onModerationGuildChange() {
+      loadModerationMembers();
+    }
+
+    function scheduleMemberSearch() {
+      clearTimeout(memberSearchTimer);
+      memberSearchTimer = setTimeout(loadModerationMembers, 300);
+    }
+
+    async function loadModerationMembers() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const select = document.getElementById("modMemberSelect");
+      if (!guildId) { select.innerHTML = '<option value="">Əvvəl server seçin</option>'; return; }
+      const query = document.getElementById("modMemberSearch").value.trim();
+      try {
+        const res = await fetch(`/admin/api/moderation/members?guild_id=${encodeURIComponent(guildId)}&q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (!data.success) { select.innerHTML = '<option value="">Üzvlər yüklənmədi</option>'; return; }
+        select.innerHTML = '<option value="">Üzv seçin</option>' + data.members.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (@${escapeHtml(m.username)})</option>`).join("");
+        if (data.members.length === 1) {
+          select.value = data.members[0].id;
+          onModerationMemberChange();
+        }
+      } catch (_) {}
+    }
+
+    async function onModerationMemberChange() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = document.getElementById("modMemberSelect").value;
+      if (!guildId || !userId) return;
+
+      loadMemberProfile(guildId, userId);
+      loadUserRoles();
+      loadWarnings();
+    }
+
+    async function loadMemberProfile(guildId, userId) {
+      try {
+        const res = await fetch(`/admin/api/moderation/member?guild_id=${encodeURIComponent(guildId)}&user_id=${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (data.success && data.member) {
+          const m = data.member;
+          document.getElementById("memberName").innerText = m.name;
+          document.getElementById("memberTag").innerText = `@${m.username} · ID: ${m.id}`;
+          document.getElementById("memberAvatarWrap").innerHTML = `<img src="${m.avatar}" class="w-full h-full object-cover"/>`;
+          
+          const joinStr = m.joined_at ? new Date(m.joined_at).toLocaleDateString() : "Bilinmir";
+          const createStr = new Date(m.created_at).toLocaleDateString();
+          document.getElementById("memberDates").innerHTML = `
+            <span>📅 Qoşuldu: <b class="text-slate-300">${joinStr}</b></span>
+            <span>🎂 Hesab tarixi: <b class="text-slate-300">${createStr}</b></span>
+          `;
+        }
+      } catch (_) {}
+    }
+
+    async function loadUserRoles() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = document.getElementById("modMemberSelect").value;
+      const container = document.getElementById("memberRolesContainer");
+      if (!guildId || !userId) { container.innerHTML = '<span class="text-xs text-slate-500">Üzv seçin.</span>'; return; }
+
+      container.innerHTML = '<span class="text-xs text-slate-500">Rollar yüklənir...</span>';
+      try {
+        const res = await fetch(`/admin/api/moderation/roles?guild_id=${encodeURIComponent(guildId)}&user_id=${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (!data.success) { container.innerHTML = `<span class="text-xs text-rose-400">${data.error}</span>`; return; }
+
+        if (!data.roles || data.roles.length === 0) {
+          container.innerHTML = '<span class="text-xs text-slate-500">Bu serverdə idarə oluna bilən rol tapılmadı.</span>';
+          return;
+        }
+
+        container.innerHTML = data.roles.map(r => {
+          const isAssigned = r.assigned;
+          const bgStyle = isAssigned ? `background-color: ${r.color}22; border-color: ${r.color}; color: white;` : `border-color: #222838; color: #94a3b8;`;
+          return `
+            <button
+              type="button"
+              onclick="toggleRole('${r.id}', ${isAssigned ? "'remove'" : "'add'"})"
+              ${!r.manageable ? 'disabled title="Botun rolu bu roldan aşağıdır"' : ''}
+              class="px-2.5 py-1 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition ${!r.manageable ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105'}"
+              style="${bgStyle}"
+            >
+              <span class="w-2 h-2 rounded-full" style="background-color: ${r.color}"></span>
+              <span>${escapeHtml(r.name)}</span>
+              <span class="text-[10px] ml-1 font-bold">${isAssigned ? '✓' : '+'}</span>
+            </button>
+          `;
+        }).join("");
+      } catch (_) {
+        container.innerHTML = '<span class="text-xs text-rose-400">Rollar oxunmadı.</span>';
+      }
+    }
+
+    async function toggleRole(roleId, action) {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = document.getElementById("modMemberSelect").value;
+      try {
+        const res = await fetch("/admin/api/moderation/roles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            guild_id: guildId,
+            user_id: userId,
+            role_id: roleId,
+            action: action,
+            csrf_token: globalCsrfToken
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Rol ${action === 'add' ? 'verildi' : 'alındı'}`, "success");
+          loadUserRoles();
+        } else {
+          showToast(data.error || "Xəta", "error");
+        }
+      } catch (_) {
         showToast("Şəbəkə xətası", "error");
       }
     }
 
+    async function loadWarnings() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const userId = document.getElementById("modMemberSelect").value;
+      const total = document.getElementById("warningTotal");
+      const root = document.getElementById("warningHistory");
+      if (!guildId || !userId) { total.textContent = "Üzv seçin"; root.textContent = "Üzv seçiləndə görünür."; return; }
+
+      root.textContent = "Yüklənir...";
+      try {
+        const res = await fetch(`/admin/api/moderation/warnings?guild_id=${encodeURIComponent(guildId)}&user_id=${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (!data.success) { root.textContent = data.error || "Xəta"; return; }
+        total.textContent = `Ümumi xəbərdarlıq sayı: ${data.total}`;
+        root.innerHTML = data.warnings.length ? data.warnings.map(w => `
+          <div class="glass-panel p-3 rounded-xl border border-borderDark space-y-1">
+            <div class="flex justify-between text-[11px] text-slate-500">
+              <span class="font-mono text-indigo-400">#${w.id} · ${w.date}</span>
+              <span>Mod: ${w.moderator_id || "Admin"}</span>
+            </div>
+            <p class="text-slate-200">${escapeHtml(w.reason)}</p>
+          </div>
+        `).join("") : '<p class="text-slate-500">Heç bir xəbərdarlığı yoxdur.</p>';
+      } catch (_) {
+        root.textContent = "Yüklənmədi.";
+      }
+    }
+
+    function updateModerationForm() {
+      const act = document.getElementById("modAction").value;
+      document.getElementById("modUnbanWrap").classList.toggle("hidden", act !== "unban");
+      document.getElementById("modDurationWrap").classList.toggle("hidden", act !== "timeout");
+    }
+
+    async function submitModerationAction() {
+      const guildId = document.getElementById("modGuildSelect").value;
+      const act = document.getElementById("modAction").value;
+      const userId = act === "unban" ? document.getElementById("modUnbanId").value.trim() : document.getElementById("modMemberSelect").value;
+      const reason = document.getElementById("modReason").value.trim();
+      const duration = document.getElementById("modDuration").value;
+      const fb = document.getElementById("modFeedback");
+
+      if (!guildId || !userId) {
+        fb.innerText = "Server və istifadəçi mütləq seçilməlidir!";
+        fb.className = "text-xs text-rose-400 text-center";
+        return;
+      }
+
+      fb.innerText = "İcra olunur...";
+      fb.className = "text-xs text-indigo-400 text-center";
+
+      try {
+        const res = await fetch("/admin/api/moderation/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            guild_id: guildId,
+            user_id: userId,
+            action: act,
+            reason: reason,
+            duration: duration,
+            csrf_token: globalCsrfToken
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          fb.innerText = data.message || "Uğurla tamamlandı!";
+          fb.className = "text-xs text-emerald-400 text-center";
+          showToast(data.message, "success");
+          loadWarnings();
+        } else {
+          fb.innerText = data.error || "Xəta baş verdi";
+          fb.className = "text-xs text-rose-400 text-center";
+          showToast(data.error, "error");
+        }
+      } catch (_) {
+        fb.innerText = "Şəbəkə xətası";
+        fb.className = "text-xs text-rose-400 text-center";
+      }
+    }
+
+    /* ==================== SERVER STRUCTURE ==================== */
+    async function loadStructureGuilds() {
+      const select = document.getElementById("structureGuildSelect");
+      try {
+        const res = await fetch("/admin/api/moderation/guilds");
+        const data = await res.json();
+        if (!data.success) return;
+        select.innerHTML = data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+        if (data.guilds.length > 0) loadServerStructure();
+      } catch (_) {}
+    }
+
+    async function loadServerStructure() {
+      const guildId = document.getElementById("structureGuildSelect").value;
+      const root = document.getElementById("structureTreeContainer");
+      if (!guildId) return;
+
+      root.innerHTML = '<div class="text-center text-slate-500 py-6 text-sm">Kanallar oxunur...</div>';
+      try {
+        const res = await fetch(`/admin/api/structure?guild_id=${encodeURIComponent(guildId)}`);
+        const data = await res.json();
+        if (!data.success) { root.innerHTML = `<div class="text-rose-400">${data.error}</div>`; return; }
+
+        const cats = data.categories || [];
+        const chans = data.channels || [];
+
+        let html = '';
+        cats.forEach(c => {
+          const sub = chans.filter(ch => ch.category_id === c.id);
+          html += `
+            <div class="glass-panel p-4 rounded-xl border border-borderDark space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <span>${escapeHtml(c.name)}</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pl-4 pt-1">
+                ${sub.map(ch => `
+                  <div class="flex items-center gap-2 text-xs text-slate-300 py-1 px-2.5 rounded bg-black/30 border border-white/5">
+                    <span>${ch.type === 'voice' ? '🔊' : '#'}</span>
+                    <span class="truncate font-mono">${escapeHtml(ch.name)}</span>
+                  </div>
+                `).join('') || '<span class="text-xs text-slate-600">Bu kateqoriyada kanal yoxdur</span>'}
+              </div>
+            </div>
+          `;
+        });
+
+        // Uncategorized
+        const uncategorized = chans.filter(ch => !ch.category_id);
+        if (uncategorized.length > 0) {
+          html += `
+            <div class="glass-panel p-4 rounded-xl border border-borderDark space-y-2">
+              <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Kateqoriyasız Kanallar</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pl-4 pt-1">
+                ${uncategorized.map(ch => `
+                  <div class="flex items-center gap-2 text-xs text-slate-300 py-1 px-2.5 rounded bg-black/30 border border-white/5">
+                    <span>${ch.type === 'voice' ? '🔊' : '#'}</span>
+                    <span class="truncate font-mono">${escapeHtml(ch.name)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        root.innerHTML = html || '<div class="text-slate-500 text-center">Serverdə heç bir kanal tapılmadı.</div>';
+      } catch (_) {
+        root.innerHTML = '<div class="text-rose-400 text-center">Şəbəkə xətası.</div>';
+      }
+    }
+
+    /* ==================== BOT GUIDES ==================== */
+    async function loadBotsGuilds() {
+      const select = document.getElementById("botsGuildSelect");
+      try {
+        const res = await fetch("/admin/api/moderation/guilds");
+        const data = await res.json();
+        if (!data.success) return;
+        select.innerHTML = data.guilds.map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join("");
+        if (data.guilds.length > 0) loadGuildBots();
+      } catch (_) {}
+    }
+
+    async function loadGuildBots() {
+      const guildId = document.getElementById("botsGuildSelect").value;
+      const list = document.getElementById("guildBotsList");
+      if (!guildId) return;
+
+      list.innerHTML = '<div class="text-xs text-slate-500 p-2">Botlar axtarılır...</div>';
+      try {
+        const res = await fetch(`/admin/api/bots?guild_id=${encodeURIComponent(guildId)}`);
+        const data = await res.json();
+        if (!data.success || !data.bots || data.bots.length === 0) {
+          list.innerHTML = '<div class="text-xs text-slate-500 p-2">Serverdə heç bir bot tapılmadı.</div>';
+          return;
+        }
+
+        list.innerHTML = data.bots.map(b => `
+          <button
+            onclick="loadBotCommands('${b.provider || ''}', '${escapeHtml(b.name)}', '${b.avatar}')"
+            class="w-full text-left p-2.5 rounded-xl border border-borderDark hover:border-indigo-500/50 hover:bg-cardHeader transition flex items-center gap-3"
+          >
+            <img src="${b.avatar}" class="w-8 h-8 rounded-lg object-cover flex-shrink-0"/>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-bold text-white truncate">${escapeHtml(b.name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${b.provider ? 'Dəstəklənən Bələdçi' : 'Xüsusi Bot'}</div>
+            </div>
+          </button>
+        `).join("");
+      } catch (_) {
+        list.innerHTML = '<div class="text-xs text-rose-400 p-2">Botlar alınmadı.</div>';
+      }
+    }
+
+    async function loadBotCommands(provider, name, avatar) {
+      document.getElementById("botGuideName").innerText = name;
+      document.getElementById("botGuideDesc").innerText = provider ? `${name} üçün rəsmi komanda cədvəli` : "Bu bot üçün rəsmi inteqrasiya olunmuş veb komanda cədvəli tapılmadı.";
+      const root = document.getElementById("botCommandsContainer");
+      const docLink = document.getElementById("botGuideLink");
+
+      if (!provider) {
+        docLink.classList.add("hidden");
+        root.innerHTML = '<div class="text-xs text-slate-500 py-8 text-center">Bu bot üçün rəsmi maşınla oxunan mənbə konfiqurasiya edilməyib.</div>';
+        return;
+      }
+
+      root.innerHTML = '<div class="text-xs text-slate-500 py-8 text-center">Rəsmi komandalar canlı çəkilir...</div>';
+      try {
+        const res = await fetch(`/admin/api/bots/commands?provider=${encodeURIComponent(provider)}`);
+        const data = await res.json();
+        if (data.docs) {
+          docLink.href = data.docs;
+          docLink.classList.remove("hidden");
+        }
+
+        if (data.commands && data.commands.length > 0) {
+          root.innerHTML = data.commands.map(c => `
+            <div class="glass-panel p-3 rounded-xl border border-borderDark flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <span class="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">${escapeHtml(c.name || c.command || '')}</span>
+                <p class="text-xs text-slate-300 mt-1">${escapeHtml(c.description || c.desc || 'Açıqlama qeyd olunmayıb')}</p>
+              </div>
+              <span class="text-[10px] text-slate-500 font-mono flex-shrink-0">${escapeHtml(c.syntax || '')}</span>
+            </div>
+          `).join("");
+        } else {
+          root.innerHTML = `<div class="text-xs text-amber-400 py-6 text-center">${escapeHtml(data.message || 'Komandalar tapılmadı')}</div>`;
+        }
+      } catch (_) {
+        root.innerHTML = '<div class="text-xs text-rose-400 py-6 text-center">Sənədlər çəkilə bilmədi.</div>';
+      }
+    }
+
+    /* ==================== HELPERS ==================== */
     function showToast(msg, type = "success") {
       const toast = document.getElementById("toast");
       const toastIcon = document.getElementById("toastIcon");
@@ -972,11 +1449,11 @@
 
       toastMessage.innerText = msg;
       if (type === "success") {
-        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-emerald-950/90 border-emerald-500/40 text-emerald-200";
+        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-emerald-950/95 border-emerald-500/40 text-emerald-200";
         toastIcon.innerHTML = `<svg class="w-5 h-5 text-emerald-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>`;
       } else {
-        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-red-950/90 border-red-500/40 text-red-200";
-        toastIcon.innerHTML = `<svg class="w-5 h-5 text-red-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>`;
+        toast.className = "fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 bg-rose-950/95 border-rose-500/40 text-rose-200";
+        toastIcon.innerHTML = `<svg class="w-5 h-5 text-rose-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>`;
       }
 
       toast.classList.remove("hidden");
@@ -999,4 +1476,3 @@
   </script>
 </body>
 </html>
-

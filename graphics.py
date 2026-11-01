@@ -1,7 +1,7 @@
 import io
 import math
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend
 import matplotlib.pyplot as plt
@@ -167,91 +167,6 @@ def generate_rank_card(
     xp_text = f"{current_progress:,} / {range_xp:,} XP ({progress_pct}%)"
     draw.text((bar_x, bar_y + bar_h + 14), "Növbəti səviyyəyə tərəqqi", font=_get_font(16, bold=False), fill=(140, 150, 175, 255))
     draw.text((bar_x + bar_w, bar_y + bar_h + 14), xp_text, font=font_xp, fill=(87, 242, 135, 255), anchor="ra")
-
-    output = io.BytesIO()
-    card.save(output, format="PNG", optimize=True)
-    output.seek(0)
-    return output
-
-
-def generate_welcome_card(
-    avatar_bytes: bytes,
-    username: str,
-    guild_name: str,
-    member_count: int,
-) -> io.BytesIO:
-    """Yeni qatılan üzvlər üçün şık, vizual Welcome şəkli yaradır."""
-    width, height = 900, 320
-    card = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-
-    # Arxa fon
-    bg = Image.new("RGBA", (width, height), (14, 17, 24, 255))
-    bg_draw = ImageDraw.Draw(bg)
-    for y in range(height):
-        ratio = y / height
-        r = int(14 + ratio * 20)
-        g = int(18 + ratio * 15)
-        b = int(28 + ratio * 35)
-        bg_draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
-
-    # Neon işıq effektləri
-    accent = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    accent_draw = ImageDraw.Draw(accent)
-    accent_draw.ellipse([(width // 2 - 150, -80), (width // 2 + 150, 180)], fill=(88, 101, 242, 60))
-    accent_draw.ellipse([(width - 200, height - 100), (width + 100, height + 100)], fill=(87, 242, 135, 40))
-    accent = accent.filter(ImageFilter.GaussianBlur(40))
-    bg = Image.alpha_composite(bg, accent)
-
-    # Dairəvi kənarlar
-    mask = Image.new("L", (width, height), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    mask_draw.rounded_rectangle([(0, 0), (width, height)], radius=24, fill=255)
-    card.paste(bg, (0, 0), mask)
-
-    draw = ImageDraw.Draw(card)
-    draw.rounded_rectangle([(1, 1), (width - 2, height - 2)], radius=24, outline=(88, 101, 242, 140), width=2)
-
-    # Mərkəzləşdirilmiş dairəvi Avatar
-    avatar_size = 120
-    avatar_x = (width - avatar_size) // 2
-    avatar_y = 30
-
-    if avatar_bytes:
-        try:
-            avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
-            avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
-        except Exception:
-            avatar_img = Image.new("RGBA", (avatar_size, avatar_size), (88, 101, 242, 255))
-    else:
-        avatar_img = Image.new("RGBA", (avatar_size, avatar_size), (88, 101, 242, 255))
-
-    avatar_mask = Image.new("L", (avatar_size, avatar_size), 0)
-    avatar_mask_draw = ImageDraw.Draw(avatar_mask)
-    avatar_mask_draw.ellipse([(0, 0), (avatar_size, avatar_size)], fill=255)
-
-    # Parlaq xarici halqa
-    draw.ellipse(
-        [(avatar_x - 5, avatar_y - 5), (avatar_x + avatar_size + 5, avatar_y + avatar_size + 5)],
-        outline=(88, 101, 242, 255),
-        width=4,
-    )
-    card.paste(avatar_img, (avatar_x, avatar_y), avatar_mask)
-
-    # Mətnlər
-    draw.text((width // 2, 165), "XOŞ GƏLDİN!", font=_get_font(22, bold=True), fill=(87, 242, 135, 255), anchor="mm")
-    
-    clean_name = username if len(username) <= 24 else f"{username[:23]}…"
-    draw.text((width // 2, 205), clean_name, font=_get_font(30, bold=True), fill=(255, 255, 255, 255), anchor="mm")
-
-    guild_label = f"{guild_name} serverinə qatıldı" if len(guild_name) <= 30 else f"{guild_name[:29]}… serverinə qatıldı"
-    draw.text((width // 2, 245), guild_label, font=_get_font(18, bold=False), fill=(160, 175, 205, 255), anchor="mm")
-
-    # Üzv Sayı Badge
-    badge_text = f"🎉 #{member_count:,}-ci Üzv"
-    badge_w = 200
-    badge_box = [(width // 2 - badge_w // 2, 272), (width // 2 + badge_w // 2, 302)]
-    draw.rounded_rectangle(badge_box, radius=10, fill=(88, 101, 242, 45), outline=(88, 101, 242, 180), width=1)
-    draw.text((width // 2, 287), badge_text, font=_get_font(16, bold=True), fill=(255, 215, 0, 255), anchor="mm")
 
     output = io.BytesIO()
     card.save(output, format="PNG", optimize=True)

@@ -9,7 +9,7 @@ import secrets
 import sqlite3
 import time
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -343,7 +343,7 @@ async def send_discord_post_payload(
     link_url: str,
     images: List[Tuple[str, bytes]]  # [(filename, bytes), ...]
 ) -> Tuple[bool, Optional[str], Optional[str]]:
-    """Posts modern embed(s) with button to an NSFW channel. Splits into multiple messages if needed."""
+    """Posts modern embed(s) with button to a text channel. Splits into multiple messages if needed."""
     channel = bot.get_channel(channel_id)
     if not channel:
         try:
@@ -353,10 +353,6 @@ async def send_discord_post_payload(
 
     if not isinstance(channel, discord.TextChannel):
         return False, None, "Seçilmiş kanal mətn kanalı deyil."
-
-    # Strict NSFW verification
-    if not channel.is_nsfw():
-        return False, None, f"Təhlükəsizlik xətası: '#{channel.name}' kanalı yaş məhdudiyyətli (NSFW) deyil! Göndərilmə rədd edildi."
 
     # Check bot permissions
     perms = channel.permissions_for(channel.guild.me)
@@ -410,7 +406,7 @@ async def send_discord_post_payload(
                 description=description if is_first else None,
                 color=0x5865F2,
                 url=link_url,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             embed.set_footer(text="Abi Bot Admin Panel")
 

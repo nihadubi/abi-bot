@@ -2,3 +2,5 @@
 voice_stats.db
 __pycache__/
 *.pyc
+.env
+voice_stats.db

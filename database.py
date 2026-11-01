@@ -1,976 +1,251 @@
 import sqlite3
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
+
+SCHEMA_VERSION = 4
 
 
 class Database:
-    def __init__(self, db_path: str = "voice_stats.db"):
+    """SQLite storage; member records are isolated by Discord guild."""
+    def __init__(self, db_path="voice_stats.db"):
         self.db_path = db_path
         self._create_tables()
 
+    def _connect(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+
     def _create_tables(self):
-        # Cədvəlləri ilkin olaraq yaradırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
+        with self._connect() as conn:
+            c = conn.cursor()
+            # Schema upgrades are additive. Never drop existing guild data here.
+            c.executescript("""
+            CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS users (
+                guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, username TEXT, display_name TEXT,
+                total_seconds INTEGER NOT NULL DEFAULT 0, first_seen TEXT, xp INTEGER NOT NULL DEFAULT 0,
+                level INTEGER NOT NULL DEFAULT 1, streak INTEGER NOT NULL DEFAULT 0, last_streak_date TEXT,
+                highest_streak INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (guild_id,user_id));
+            CREATE TABLE IF NOT EXISTS sessions (
+                guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, date TEXT NOT NULL, seconds INTEGER NOT NULL,
+                PRIMARY KEY (guild_id,user_id,date), FOREIGN KEY (guild_id,user_id) REFERENCES users(guild_id,user_id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS warnings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+                moderator_id INTEGER, reason TEXT, date TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS guild_settings (guild_id INTEGER NOT NULL,key TEXT NOT NULL,value TEXT,PRIMARY KEY(guild_id,key));
+            CREATE TABLE IF NOT EXISTS temp_channels (channel_id INTEGER PRIMARY KEY,guild_id INTEGER NOT NULL,owner_id INTEGER NOT NULL,created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS admin_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id INTEGER NOT NULL,title TEXT NOT NULL,description TEXT,link_url TEXT NOT NULL,
+                channel_id INTEGER NOT NULL,channel_name TEXT,status TEXT NOT NULL DEFAULT 'sent',discord_message_id TEXT,
+                scheduled_time TEXT,created_at TEXT NOT NULL,error_message TEXT);
+            CREATE TABLE IF NOT EXISTS post_images (id INTEGER PRIMARY KEY AUTOINCREMENT,post_id INTEGER NOT NULL,filename TEXT,image_url TEXT,image_bytes BLOB,FOREIGN KEY(post_id) REFERENCES admin_posts(id) ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS log_settings (
+                guild_id INTEGER NOT NULL, event_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+                channel_id INTEGER, PRIMARY KEY(guild_id,event_key));
+            CREATE TABLE IF NOT EXISTS log_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL, event_key TEXT NOT NULL,
+                title TEXT NOT NULL, actor_id INTEGER, actor_name TEXT, target_id INTEGER, target_name TEXT,
+                channel_id INTEGER, channel_name TEXT, details TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS invite_snapshots (
+                guild_id INTEGER NOT NULL, code TEXT NOT NULL, uses INTEGER NOT NULL DEFAULT 0,
+                inviter_id INTEGER, inviter_name TEXT, channel_id INTEGER, url TEXT, expires_at TEXT,
+                PRIMARY KEY(guild_id,code));
+            CREATE INDEX IF NOT EXISTS idx_warnings_guild_user ON warnings(guild_id,user_id);
+            CREATE INDEX IF NOT EXISTS idx_posts_guild ON admin_posts(guild_id,created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_logs_guild_created ON log_events(guild_id,created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_logs_guild_event ON log_events(guild_id,event_key,created_at DESC);
+            """)
+            # Forget only the retired welcome/auto-role settings; preserve every other guild setting.
+            c.execute("DELETE FROM guild_settings WHERE key IN ('autorole','member_role','new_member_role','welcome_channel')")
+            c.execute("INSERT OR REPLACE INTO schema_meta VALUES('version',?)", (str(SCHEMA_VERSION),))
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS users (
-                        user_id INTEGER PRIMARY KEY,
-                        username TEXT,
-                        display_name TEXT,
-                        total_seconds INTEGER DEFAULT 0,
-                        first_seen TEXT,
-                        xp INTEGER DEFAULT 0,
-                        level INTEGER DEFAULT 1
-                    )
-                    """
-                )
+    def get_log_settings(self, guild_id):
+        with self._connect() as c:
+            rows = c.execute("SELECT event_key,enabled,channel_id FROM log_settings WHERE guild_id=?", (guild_id,)).fetchall()
+        return {row["event_key"]: {"enabled": bool(row["enabled"]), "channel_id": row["channel_id"]} for row in rows}
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS sessions (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER,
-                        date TEXT,
-                        seconds INTEGER,
-                        FOREIGN KEY (user_id) REFERENCES users(user_id)
-                    )
-                    """
-                )
+    def set_log_setting(self, guild_id, event_key, enabled, channel_id):
+        with self._connect() as c:
+            c.execute("""INSERT INTO log_settings(guild_id,event_key,enabled,channel_id) VALUES(?,?,?,?)
+                ON CONFLICT(guild_id,event_key) DO UPDATE SET enabled=excluded.enabled,channel_id=excluded.channel_id""",
+                (guild_id, event_key, int(bool(enabled)), channel_id))
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS warnings (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER,
-                        moderator_id INTEGER,
-                        reason TEXT,
-                        date TEXT
-                    )
-                    """
-                )
+    def add_log_event(self, guild_id, event_key, title, actor_id=None, actor_name=None,
+                      target_id=None, target_name=None, channel_id=None, channel_name=None,
+                      details=None, created_at=None):
+        with self._connect() as c:
+            cur = c.execute("""INSERT INTO log_events(guild_id,event_key,title,actor_id,actor_name,target_id,
+                target_name,channel_id,channel_name,details,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (guild_id, event_key, title, actor_id, actor_name, target_id, target_name,
+                 channel_id, channel_name, json.dumps(details or {}, ensure_ascii=False),
+                 created_at or datetime.now(timezone.utc).isoformat()))
+            return cur.lastrowid
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS guild_settings (
-                        guild_id INTEGER,
-                        key TEXT,
-                        value TEXT,
-                        PRIMARY KEY (guild_id, key)
-                    )
-                    """
-                )
+    def query_log_events(self, guild_id, start=None, end=None, event_key=None, search=None, limit=100, offset=0):
+        clauses, args = ["guild_id=?"], [guild_id]
+        if start:
+            clauses.append("created_at>=?"); args.append(start)
+        if end:
+            clauses.append("created_at<=?"); args.append(end)
+        if event_key:
+            clauses.append("event_key=?"); args.append(event_key)
+        if search:
+            clauses.append("(title LIKE ? OR actor_name LIKE ? OR target_name LIKE ? OR details LIKE ?)")
+            args.extend([f"%{search}%"] * 4)
+        where = " AND ".join(clauses)
+        with self._connect() as c:
+            total = c.execute(f"SELECT COUNT(*) FROM log_events WHERE {where}", args).fetchone()[0]
+            rows = c.execute(f"SELECT * FROM log_events WHERE {where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+                              [*args, max(1, min(int(limit), 200)), max(0, int(offset))]).fetchall()
+        return int(total), [dict(row) for row in rows]
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS temp_channels (
-                        channel_id INTEGER PRIMARY KEY,
-                        guild_id INTEGER,
-                        owner_id INTEGER,
-                        created_at TEXT
-                    )
-                    """
-                )
+    def get_log_analytics(self, guild_id, start, end):
+        with self._connect() as c:
+            by_event = c.execute("SELECT event_key,COUNT(*) count FROM log_events WHERE guild_id=? AND created_at>=? AND created_at<=? GROUP BY event_key ORDER BY count DESC",
+                                 (guild_id, start, end)).fetchall()
+            by_day = c.execute("SELECT substr(created_at,1,10) day,COUNT(*) count FROM log_events WHERE guild_id=? AND created_at>=? AND created_at<=? GROUP BY day ORDER BY day",
+                               (guild_id, start, end)).fetchall()
+            invites = c.execute("SELECT actor_id,actor_name,COUNT(*) count FROM log_events WHERE guild_id=? AND event_key='invite_use' AND created_at>=? AND created_at<=? AND actor_id IS NOT NULL GROUP BY actor_id,actor_name ORDER BY count DESC LIMIT 10",
+                                (guild_id, start, end)).fetchall()
+        return {"by_event": [dict(r) for r in by_event], "by_day": [dict(r) for r in by_day],
+                "top_inviters": [dict(r) for r in invites]}
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS admin_posts (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        title TEXT NOT NULL,
-                        description TEXT,
-                        link_url TEXT NOT NULL,
-                        channel_id INTEGER NOT NULL,
-                        channel_name TEXT,
-                        status TEXT DEFAULT 'sent', -- 'sent', 'scheduled', 'failed', 'deleted'
-                        discord_message_id TEXT,
-                        scheduled_time TEXT,
-                        created_at TEXT NOT NULL,
-                        error_message TEXT
-                    )
-                    """
-                )
+    def save_invite_snapshots(self, guild_id, invites):
+        with self._connect() as c:
+            c.execute("DELETE FROM invite_snapshots WHERE guild_id=?", (guild_id,))
+            c.executemany("INSERT INTO invite_snapshots(guild_id,code,uses,inviter_id,inviter_name,channel_id,url,expires_at) VALUES(?,?,?,?,?,?,?,?)",
+                          [(guild_id, item["code"], item["uses"], item.get("inviter_id"), item.get("inviter_name"),
+                            item.get("channel_id"), item.get("url"), item.get("expires_at")) for item in invites])
 
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS post_images (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        post_id INTEGER NOT NULL,
-                        filename TEXT,
-                        image_url TEXT,
-                        image_bytes BLOB,
-                        FOREIGN KEY (post_id) REFERENCES admin_posts(id) ON DELETE CASCADE
-                    )
-                    """
-                )
+    def get_invite_snapshots(self, guild_id):
+        with self._connect() as c:
+            rows = c.execute("SELECT * FROM invite_snapshots WHERE guild_id=?", (guild_id,)).fetchall()
+        return {row["code"]: dict(row) for row in rows}
 
-                cursor.execute("DROP TABLE IF EXISTS owo_snapshots")
-
-                # Mövcud bazada çatışmayan sütunları əlavə edirik
-                cursor.execute("PRAGMA table_info(users)")
-                existing_columns = {row[1] for row in cursor.fetchall()}
-
-                if "xp" not in existing_columns:
-                    cursor.execute("ALTER TABLE users ADD COLUMN xp INTEGER DEFAULT 0")
-                if "level" not in existing_columns:
-                    cursor.execute("ALTER TABLE users ADD COLUMN level INTEGER DEFAULT 1")
-                if "streak" not in existing_columns:
-                    cursor.execute("ALTER TABLE users ADD COLUMN streak INTEGER DEFAULT 0")
-                if "last_streak_date" not in existing_columns:
-                    cursor.execute("ALTER TABLE users ADD COLUMN last_streak_date TEXT")
-                if "highest_streak" not in existing_columns:
-                    cursor.execute("ALTER TABLE users ADD COLUMN highest_streak INTEGER DEFAULT 0")
-
-                conn.commit()
-        except Exception as error:
-            print(f"[DB Xətası] Cədvəllər yaradılmadı: {error}")
-
-    def set_guild_setting(self, guild_id: int, key: str, value: str):
-        # Server tənzimləməsini bazaya yazırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO guild_settings (guild_id, key, value)
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(guild_id, key) DO UPDATE SET value = excluded.value
-                    """,
-                    (guild_id, key, str(value)),
-                )
-                conn.commit()
-                return True
-        except Exception as error:
-            print(f"[DB Xətası] Tənzimləmə saxlanılmadı: {error}")
-            return False
-
-    def get_guild_setting(self, guild_id: int, key: str, default=None):
-        # Server tənzimləməsini bazadan oxuyuruq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT value FROM guild_settings WHERE guild_id = ? AND key = ?",
-                    (guild_id, key),
-                )
-                row = cursor.fetchone()
-                return row[0] if row else default
-        except Exception as error:
-            print(f"[DB Xətası] Tənzimləmə oxunmadı: {error}")
-            return default
-
-    def add_voice_time(self, user_id, username, display_name, seconds):
-        # İstifadəçinin səs vaxtını ümumi və günlük statistikalara əlavə edirik
-        try:
-            if seconds <= 0:
-                return
-
-            today = datetime.utcnow().strftime("%Y-%m-%d")
-
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-
-                cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-                existing_user = cursor.fetchone()
-
-                if existing_user:
-                    cursor.execute(
-                        """
-                        UPDATE users
-                        SET username = ?, display_name = ?, total_seconds = total_seconds + ?
-                        WHERE user_id = ?
-                        """,
-                        (username, display_name, int(seconds), user_id),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO users (user_id, username, display_name, total_seconds, first_seen)
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (user_id, username, display_name, int(seconds), today),
-                    )
-
-                cursor.execute(
-                    "SELECT id FROM sessions WHERE user_id = ? AND date = ?",
-                    (user_id, today),
-                )
-                existing_session = cursor.fetchone()
-
-                if existing_session:
-                    cursor.execute(
-                        """
-                        UPDATE sessions
-                        SET seconds = seconds + ?
-                        WHERE user_id = ? AND date = ?
-                        """,
-                        (int(seconds), user_id, today),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO sessions (user_id, date, seconds)
-                        VALUES (?, ?, ?)
-                        """,
-                        (user_id, today, int(seconds)),
-                    )
-
-                cursor.execute(
-                    "SELECT seconds FROM sessions WHERE user_id = ? AND date = ?",
-                    (user_id, today),
-                )
-                today_row = cursor.fetchone()
-                conn.commit()
-
-            # Əgər bu gün ən azı 15 dəqiqə (900 saniyə) səsdə olubsa, streak-i yeniləyirik
-            if today_row and today_row[0] >= 900:
-                self.update_streak(user_id)
-        except Exception as error:
-            print(f"[DB Xətası] Səs vaxtı əlavə olunmadı: {error}")
-
-    def get_user(self, user_id):
-        # İstifadəçinin ümumi məlumatlarını qaytarırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-                return dict(row) if row else None
-        except Exception as error:
-            print(f"[DB Xətası] İstifadəçi alınmadı: {error}")
-            return None
-
-    def get_rank(self, user_id):
-        # İstifadəçinin ümumi vaxta görə sıralamasını hesablayırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-
-                cursor.execute("SELECT total_seconds FROM users WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return None
-
-                total_seconds = row[0]
-                cursor.execute(
-                    "SELECT COUNT(*) + 1 FROM users WHERE total_seconds > ?",
-                    (total_seconds,),
-                )
-                rank_row = cursor.fetchone()
-                return rank_row[0] if rank_row else None
-        except Exception as error:
-            print(f"[DB Xətası] Sıralama alınmadı: {error}")
-            return None
-
-    def get_leaderboard(self, limit):
-        # Ümumi lider siyahısını qaytarırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    """
-                    SELECT user_id, username, display_name, total_seconds, first_seen
-                    FROM users
-                    ORDER BY total_seconds DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
-                rows = cursor.fetchall()
-                return [dict(row) for row in rows]
-        except Exception as error:
-            print(f"[DB Xətası] Lider cədvəli alınmadı: {error}")
-            return []
-
-    def get_today(self, user_id):
-        # Bu günün saniyələrini qaytarırıq
-        try:
-            today = datetime.utcnow().strftime("%Y-%m-%d")
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT COALESCE(SUM(seconds), 0) FROM sessions WHERE user_id = ? AND date = ?",
-                    (user_id, today),
-                )
-                row = cursor.fetchone()
-                return int(row[0] or 0)
-        except Exception as error:
-            print(f"[DB Xətası] Bu günün vaxtı alınmadı: {error}")
-            return 0
-
-    def get_week(self, user_id):
-        # Son 7 günün saniyələrini qaytarırıq
-        try:
-            start_date = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT COALESCE(SUM(seconds), 0) FROM sessions WHERE user_id = ? AND date >= ?",
-                    (user_id, start_date),
-                )
-                row = cursor.fetchone()
-                return int(row[0] or 0)
-        except Exception as error:
-            print(f"[DB Xətası] Həftəlik vaxt alınmadı: {error}")
-            return 0
-
-    def get_month(self, user_id):
-        # Son 30 günün saniyələrini qaytarırıq
-        try:
-            start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT COALESCE(SUM(seconds), 0) FROM sessions WHERE user_id = ? AND date >= ?",
-                    (user_id, start_date),
-                )
-                row = cursor.fetchone()
-                return int(row[0] or 0)
-        except Exception as error:
-            print(f"[DB Xətası] Aylıq vaxt alınmadı: {error}")
-            return 0
-
-    def get_period_leaderboard(self, period, limit):
-        # Verilmiş period üzrə lider cədvəlini qaytarırıq
-        try:
-            today = datetime.utcnow().strftime("%Y-%m-%d")
-            week_start = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d")
-            month_start = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
-
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                if period == "gun":
-                    cursor.execute(
-                        """
-                        SELECT s.user_id, u.username, u.display_name, COALESCE(SUM(s.seconds), 0) AS total_seconds
-                        FROM sessions s
-                        JOIN users u ON u.user_id = s.user_id
-                        WHERE s.date = ?
-                        GROUP BY s.user_id
-                        ORDER BY total_seconds DESC
-                        LIMIT ?
-                        """,
-                        (today, limit),
-                    )
-                elif period == "hefte":
-                    cursor.execute(
-                        """
-                        SELECT s.user_id, u.username, u.display_name, COALESCE(SUM(s.seconds), 0) AS total_seconds
-                        FROM sessions s
-                        JOIN users u ON u.user_id = s.user_id
-                        WHERE s.date >= ?
-                        GROUP BY s.user_id
-                        ORDER BY total_seconds DESC
-                        LIMIT ?
-                        """,
-                        (week_start, limit),
-                    )
-                elif period == "ay":
-                    cursor.execute(
-                        """
-                        SELECT s.user_id, u.username, u.display_name, COALESCE(SUM(s.seconds), 0) AS total_seconds
-                        FROM sessions s
-                        JOIN users u ON u.user_id = s.user_id
-                        WHERE s.date >= ?
-                        GROUP BY s.user_id
-                        ORDER BY total_seconds DESC
-                        LIMIT ?
-                        """,
-                        (month_start, limit),
-                    )
-                else:
-                    return []
-
-                rows = cursor.fetchall()
-                return [dict(row) for row in rows]
-        except Exception as error:
-            print(f"[DB Xətası] Period lider cədvəli alınmadı: {error}")
-            return []
-
-    def reset_user(self, user_id):
-        # İstifadəçinin bütün səs statistikasını sıfırlayırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-                cursor.execute("UPDATE users SET total_seconds = 0 WHERE user_id = ?", (user_id,))
-                conn.commit()
-        except Exception as error:
-            print(f"[DB Xətası] İstifadəçi sıfırlanmadı: {error}")
-
-    def xp_for_level(self, level):
-        # Verilmiş səviyyə üçün lazım olan ümumi XP həddini hesablayırıq
-        try:
-            level = int(level)
-            if level <= 1:
-                return 0
-            if level == 2:
-                return 100
-            if level == 3:
-                return 250
-            if level == 4:
-                return 450
-
-            threshold = 450
-            for current_level in range(5, level + 1):
-                threshold += current_level * 150
-            return threshold
-        except Exception as error:
-            print(f"[DB Xətası] XP həddi hesablanmadı: {error}")
-            return 0
-
-    def _level_from_xp(self, xp):
-        # Mövcud ümumi XP dəyərindən səviyyəni müəyyən edirik
-        level = 1
-        while xp >= self.xp_for_level(level + 1):
-            level += 1
+    @staticmethod
+    def _today(): return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    def upsert_user_identity(self,guild_id,user_id,username,display_name):
+        with self._connect() as c: c.execute("INSERT INTO users(guild_id,user_id,username,display_name,first_seen) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name",(guild_id,user_id,username,display_name,self._today()))
+    def add_voice_time(self,guild_id,user_id,username,display_name,seconds):
+        if seconds<=0:return
+        with self._connect() as c:
+            c.execute("INSERT INTO users(guild_id,user_id,username,display_name,total_seconds,first_seen) VALUES(?,?,?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET username=excluded.username,display_name=excluded.display_name,total_seconds=users.total_seconds+excluded.total_seconds",(guild_id,user_id,username,display_name,int(seconds),self._today()))
+            c.execute("INSERT INTO sessions VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id,date) DO UPDATE SET seconds=sessions.seconds+excluded.seconds",(guild_id,user_id,self._today(),int(seconds)))
+            total=c.execute("SELECT seconds FROM sessions WHERE guild_id=? AND user_id=? AND date=?",(guild_id,user_id,self._today())).fetchone()[0]
+        if total>=900:self.update_streak(guild_id,user_id)
+    def get_user(self,guild_id,user_id):
+        with self._connect() as c: row=c.execute("SELECT * FROM users WHERE guild_id=? AND user_id=?",(guild_id,user_id)).fetchone()
+        return dict(row) if row else None
+    def get_rank(self,guild_id,user_id):
+        user=self.get_user(guild_id,user_id)
+        if not user:return None
+        with self._connect() as c:return c.execute("SELECT COUNT(*)+1 FROM users WHERE guild_id=? AND total_seconds>?",(guild_id,user['total_seconds'])).fetchone()[0]
+    def get_leaderboard(self,guild_id,limit):
+        with self._connect() as c: rows=c.execute("SELECT user_id,username,display_name,total_seconds,first_seen FROM users WHERE guild_id=? ORDER BY total_seconds DESC LIMIT ?",(guild_id,limit)).fetchall()
+        return [dict(x) for x in rows]
+    def _period(self,guild_id,user_id,start):
+        with self._connect() as c:return int(c.execute("SELECT COALESCE(SUM(seconds),0) FROM sessions WHERE guild_id=? AND user_id=? AND date>=?",(guild_id,user_id,start)).fetchone()[0])
+    def get_today(self,guild_id,user_id):return self._period(guild_id,user_id,self._today())
+    def get_week(self,guild_id,user_id):return self._period(guild_id,user_id,(datetime.now(timezone.utc)-timedelta(days=7)).strftime("%Y-%m-%d"))
+    def get_month(self,guild_id,user_id):return self._period(guild_id,user_id,(datetime.now(timezone.utc)-timedelta(days=30)).strftime("%Y-%m-%d"))
+    def get_period_leaderboard(self,guild_id,period,limit):
+        starts={'gun':self._today(),'hefte':(datetime.now(timezone.utc)-timedelta(days=7)).strftime('%Y-%m-%d'),'ay':(datetime.now(timezone.utc)-timedelta(days=30)).strftime('%Y-%m-%d')}
+        if period not in starts:return []
+        with self._connect() as c: rows=c.execute("SELECT s.user_id,u.username,u.display_name,SUM(s.seconds) total_seconds FROM sessions s JOIN users u ON u.guild_id=s.guild_id AND u.user_id=s.user_id WHERE s.guild_id=? AND s.date>=? GROUP BY s.user_id ORDER BY total_seconds DESC LIMIT ?",(guild_id,starts[period],limit)).fetchall()
+        return [dict(x) for x in rows]
+    def reset_user(self,guild_id,user_id):
+        with self._connect() as c:c.execute("DELETE FROM sessions WHERE guild_id=? AND user_id=?",(guild_id,user_id));c.execute("UPDATE users SET total_seconds=0 WHERE guild_id=? AND user_id=?",(guild_id,user_id))
+    def xp_for_level(self,level):
+        level=int(level)
+        return 0 if level<=1 else 100 if level==2 else 250 if level==3 else 450 if level==4 else 450+sum(n*150 for n in range(5,level+1))
+    def _level_from_xp(self,xp):
+        level=1
+        while xp>=self.xp_for_level(level+1):level+=1
         return level
-
-    def add_xp(self, user_id, amount):
-        # İstifadəçiyə XP əlavə edir və level artımını yoxlayırıq
-        try:
-            amount = int(amount)
-            if amount <= 0:
-                user = self.get_user(user_id)
-                if user:
-                    return int(user.get("xp") or 0), int(user.get("level") or 1), False
-                return 0, 1, False
-
-            today = datetime.utcnow().strftime("%Y-%m-%d")
-
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-
-                cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-                user = cursor.fetchone()
-
-                if not user:
-                    cursor.execute(
-                        """
-                        INSERT INTO users (user_id, username, display_name, total_seconds, first_seen, xp, level)
-                        VALUES (?, ?, ?, 0, ?, 0, 1)
-                        """,
-                        (user_id, "Naməlum", "Naməlum", today),
-                    )
-                    old_xp = 0
-                    old_level = 1
-                else:
-                    old_xp = int(user["xp"] or 0)
-                    old_level = int(user["level"] or 1)
-
-                new_xp = old_xp + amount
-                new_level = self._level_from_xp(new_xp)
-
-                cursor.execute(
-                    "UPDATE users SET xp = ?, level = ? WHERE user_id = ?",
-                    (new_xp, new_level, user_id),
-                )
-                conn.commit()
-
-                return new_xp, new_level, new_level > old_level
-        except Exception as error:
-            print(f"[DB Xətası] XP əlavə olunmadı: {error}")
-            return 0, 1, False
-
-    def get_user_rank(self, user_id: int) -> int:
-        # İstifadəçinin XP-yə görə serverdəki sıralamasını (Rank #) qaytarır
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT xp FROM users WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-                if not row:
-                    return 0
-                user_xp = row[0] or 0
-                cursor.execute("SELECT COUNT(*) FROM users WHERE xp > ?", (user_xp,))
-                higher_count = cursor.fetchone()[0]
-                return higher_count + 1
-        except Exception as error:
-            print(f"[DB Xətası] Rank alınmadı: {error}")
-            return 0
-
-    def get_level_leaderboard(self, limit):
-        # Səviyyə və XP-yə görə lider siyahısını qaytarırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT user_id, username, display_name, xp, level
-                    FROM users
-                    ORDER BY level DESC, xp DESC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
-                rows = cursor.fetchall()
-                return [dict(row) for row in rows]
-        except Exception as error:
-            print(f"[DB Xətası] XP lider cədvəli alınmadı: {error}")
-            return []
-
-    def upsert_user_identity(self, user_id, username, display_name):
-        # İstifadəçinin əsas məlumatlarını əlavə və ya yenilə edirik
-        try:
-            today = datetime.utcnow().strftime("%Y-%m-%d")
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-                existing = cursor.fetchone()
-
-                if existing:
-                    cursor.execute(
-                        """
-                        UPDATE users
-                        SET username = ?, display_name = ?
-                        WHERE user_id = ?
-                        """,
-                        (username, display_name, user_id),
-                    )
-                else:
-                    cursor.execute(
-                        """
-                        INSERT INTO users (user_id, username, display_name, total_seconds, first_seen, xp, level)
-                        VALUES (?, ?, ?, 0, ?, 0, 1)
-                        """,
-                        (user_id, username, display_name, today),
-                    )
-                conn.commit()
-        except Exception as error:
-            print(f"[DB Xətası] İstifadəçi məlumatı yenilənmədi: {error}")
-
-    def add_warning(self, user_id, moderator_id, reason):
-        # İstifadəçiyə xəbərdarlıq əlavə edirik
-        try:
-            warning_date = datetime.utcnow().strftime("%Y-%m-%d")
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    INSERT INTO warnings (user_id, moderator_id, reason, date)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (user_id, moderator_id, reason, warning_date),
-                )
-                conn.commit()
-        except Exception as error:
-            print(f"[DB Xətası] Xəbərdarlıq əlavə olunmadı: {error}")
-
-    def get_warnings(self, user_id, limit=10):
-        # İstifadəçinin son xəbərdarlıqlarını qaytarırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT id, user_id, moderator_id, reason, date
-                    FROM warnings
-                    WHERE user_id = ?
-                    ORDER BY id DESC
-                    LIMIT ?
-                    """,
-                    (user_id, limit),
-                )
-                rows = cursor.fetchall()
-                return [dict(row) for row in rows]
-        except Exception as error:
-            print(f"[DB Xətası] Xəbərdarlıqlar alınmadı: {error}")
-            return []
-
-    def get_warning_count(self, user_id):
-        # İstifadəçinin ümumi xəbərdarlıq sayını qaytarırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM warnings WHERE user_id = ?", (user_id,))
-                row = cursor.fetchone()
-                return row[0] if row else 0
-        except Exception as error:
-            print(f"[DB Xətası] Xəbərdarlıq sayı alınmadı: {error}")
-            return 0
-
-    def get_warning_leaderboard(self, limit=10):
-        # Warn-u olan istifadəçiləri ümumi sayına görə sıralayırıq
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT
-                        warnings.user_id,
-                        COALESCE(users.display_name, users.username, 'Naməlum') AS display_name,
-                        COUNT(*) AS warning_count,
-                        MAX(warnings.date) AS latest_warning
-                    FROM warnings
-                    LEFT JOIN users ON users.user_id = warnings.user_id
-                    GROUP BY warnings.user_id
-                    ORDER BY warning_count DESC, latest_warning DESC, warnings.user_id ASC
-                    LIMIT ?
-                    """,
-                    (limit,),
-                )
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Warn lider cədvəli alınmadı: {error}")
-            return []
-
-        # ID üzrə xüsusi xəbərdarlığı silirik
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM warnings WHERE id = ?", (warning_id,))
-                conn.commit()
-                return cursor.rowcount > 0
-        except Exception as error:
-            print(f"[DB Xətası] Xəbərdarlıq silinmədi: {error}")
-            return False
-
-    def clear_warnings(self, user_id):
-        # İstifadəçinin bütün xəbərdarlıqlarını təmizləyirik
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM warnings WHERE user_id = ?", (user_id,))
-                conn.commit()
-                return cursor.rowcount
-        except Exception as error:
-            print(f"[DB Xətası] Xəbərdarlıqlar təmizlənmədi: {error}")
-            return 0
-
-    def update_streak(self, user_id: int):
-        """Gündəlik səs aktivliyinə görə streak-i yeniləyir.
-        Qaytarır: (current_streak: int, updated_today: bool, bonus_xp: int)
-        """
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT streak, last_streak_date, highest_streak, xp FROM users WHERE user_id = ?",
-                    (user_id,),
-                )
-                row = cursor.fetchone()
-
-                if not row:
-                    return 0, False, 0
-
-                current_streak = row["streak"] or 0
-                last_date = row["last_streak_date"]
-                highest = row["highest_streak"] or 0
-
-                # Əgər bu gün artıq seriya sayılıbsa
-                if last_date == today:
-                    return current_streak, False, 0
-
-                # Əgər dünən səsdə olubsa, seriya davam edir
-                if last_date == yesterday:
-                    new_streak = current_streak + 1
-                else:
-                    # Əgər dünən səsdə olmayıbsa, seriya 1-dən yenidən başlayır
-                    new_streak = 1
-
-                new_highest = max(highest, new_streak)
-                # Seriya bonusu: hər gün üçün new_streak * 10 XP (maksimum 100 XP)
-                bonus_xp = min(new_streak * 10, 100)
-
-                cursor.execute(
-                    """
-                    UPDATE users
-                    SET streak = ?, last_streak_date = ?, highest_streak = ?, xp = xp + ?
-                    WHERE user_id = ?
-                    """,
-                    (new_streak, today, new_highest, bonus_xp, user_id),
-                )
-                conn.commit()
-                return new_streak, True, bonus_xp
-        except Exception as error:
-            print(f"[DB Xətası] Streak yenilənmədi: {error}")
-            return 0, False, 0
-
-    def get_streak(self, user_id: int):
-        """İstifadəçinin aktiv və ən yüksək streak məlumatını qaytarır."""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT streak, last_streak_date, highest_streak FROM users WHERE user_id = ?",
-                    (user_id,),
-                )
-                row = cursor.fetchone()
-                if not row:
-                    return {"streak": 0, "highest_streak": 0, "active_today": False}
-
-                last_date = row["last_streak_date"]
-                current_streak = row["streak"] or 0
-                highest = row["highest_streak"] or 0
-
-                # Əgər son aktivlik dünən və ya bu gün deyilsə, aktiv seriya sıfırlanmış sayılır
-                if last_date not in (today, yesterday):
-                    current_streak = 0
-
-                return {
-                    "streak": current_streak,
-                    "highest_streak": highest,
-                    "active_today": (last_date == today),
-                    "last_streak_date": last_date or "Qeyd olunmayıb",
-                }
-        except Exception as error:
-            print(f"[DB Xətası] Streak oxunmadı: {error}")
-            return {"streak": 0, "highest_streak": 0, "active_today": False}
-
-    def get_streak_leaderboard(self, limit: int = 10):
-        """Ən yüksək aktiv və rekord səs seriyasına sahib istifadəçilər."""
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
-
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT user_id, username, display_name,
-                           CASE WHEN last_streak_date IN (?, ?) THEN streak ELSE 0 END AS current_streak,
-                           highest_streak
-                    FROM users
-                    WHERE highest_streak > 0 OR streak > 0
-                    ORDER BY current_streak DESC, highest_streak DESC, total_seconds DESC
-                    LIMIT ?
-                    """,
-                    (today, yesterday, limit),
-                )
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Streak lider cədvəli alınmadı: {error}")
-            return []
-
-    def get_user_daily_history(self, user_id: int, days: int = 7):
-        """İstifadəçinin son N günlük səs aktivliyini (saniyələrlə) qaytarır."""
-        start_date = (datetime.utcnow() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT date, seconds
-                    FROM sessions
-                    WHERE user_id = ? AND date >= ?
-                    ORDER BY date ASC
-                    """,
-                    (user_id, start_date),
-                )
-                data_dict = {row[0]: row[1] for row in cursor.fetchall()}
-
-            result = []
-            for i in range(days):
-                d = (datetime.utcnow() - timedelta(days=days - 1 - i))
-                date_str = d.strftime("%Y-%m-%d")
-                weekday_az = ["B.e", "Ç.a", "Ç", "C.a", "C", "Ş", "B"][d.weekday()]
-                result.append({
-                    "date": date_str,
-                    "day_label": f"{weekday_az}\n{d.strftime('%d.%m')}",
-                    "weekday": weekday_az,
-                    "seconds": data_dict.get(date_str, 0),
-                })
-            return result
-        except Exception as error:
-            print(f"[DB Xətası] Günlük statistika tarixi alınmadı: {error}")
-            return []
-
-    def add_temp_channel(self, channel_id: int, guild_id: int, owner_id: int):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                cursor.execute(
-                    """
-                    INSERT INTO temp_channels (channel_id, guild_id, owner_id, created_at)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(channel_id) DO UPDATE SET owner_id = excluded.owner_id
-                    """,
-                    (channel_id, guild_id, owner_id, now),
-                )
-                conn.commit()
-                return True
-        except Exception as error:
-            print(f"[DB Xətası] Temp kanal əlavə edilmədi: {error}")
-            return False
-
-    def get_temp_channel(self, channel_id: int):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM temp_channels WHERE channel_id = ?", (channel_id,))
-                row = cursor.fetchone()
-                return dict(row) if row else None
-        except Exception as error:
-            print(f"[DB Xətası] Temp kanal oxunmadı: {error}")
-            return None
-
-    def remove_temp_channel(self, channel_id: int):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM temp_channels WHERE channel_id = ?", (channel_id,))
-                conn.commit()
-                return cursor.rowcount > 0
-        except Exception as error:
-            print(f"[DB Xətası] Temp kanal silinmədi: {error}")
-            return False
-
-    def get_guild_temp_channels(self, guild_id: int):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM temp_channels WHERE guild_id = ?", (guild_id,))
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Server temp kanalları oxunmadı: {error}")
-            return []
-
-    # ==================== ADMIN PANEL POST METODLARI ====================
-
-    def create_admin_post(self, title: str, description: Optional[str], link_url: str,
-                          channel_id: int, channel_name: str, status: str = "sent",
-                          discord_message_id: Optional[str] = None, scheduled_time: Optional[str] = None,
-                          error_message: Optional[str] = None, images: Optional[List[dict]] = None) -> int:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                cursor.execute(
-                    """
-                    INSERT INTO admin_posts (
-                        title, description, link_url, channel_id, channel_name,
-                        status, discord_message_id, scheduled_time, created_at, error_message
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (title, description, link_url, channel_id, channel_name,
-                     status, discord_message_id, scheduled_time, now, error_message)
-                )
-                post_id = cursor.lastrowid
-                if images:
-                    for img in images:
-                        cursor.execute(
-                            """
-                            INSERT INTO post_images (post_id, filename, image_url, image_bytes)
-                            VALUES (?, ?, ?, ?)
-                            """,
-                            (post_id, img.get("filename"), img.get("image_url"), img.get("image_bytes"))
-                        )
-                conn.commit()
-                return post_id
-        except Exception as error:
-            print(f"[DB Xətası] Admin post saxlanılmadı: {error}")
-            return 0
-
-    def get_admin_posts(self, limit: int = 50) -> List[dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT * FROM admin_posts
-                    ORDER BY id DESC
-                    LIMIT ?
-                    """,
-                    (limit,)
-                )
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Admin postları oxunmadı: {error}")
-            return []
-
-    def get_admin_post(self, post_id: int) -> Optional[dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT * FROM admin_posts WHERE id = ?", (post_id,))
-                row = cursor.fetchone()
-                return dict(row) if row else None
-        except Exception as error:
-            print(f"[DB Xətası] Admin post oxunmadı: {error}")
-            return None
-
-    def get_post_images(self, post_id: int) -> List[dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, post_id, filename, image_url, image_bytes FROM post_images WHERE post_id = ?", (post_id,))
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Post şəkilləri oxunmadı: {error}")
-            return []
-
-    def update_scheduled_post_status(self, post_id: int, status: str, discord_message_id: Optional[str] = None, error_message: Optional[str] = None):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    UPDATE admin_posts
-                    SET status = ?, discord_message_id = COALESCE(?, discord_message_id), error_message = ?
-                    WHERE id = ?
-                    """,
-                    (status, discord_message_id, error_message, post_id)
-                )
-                conn.commit()
-                return True
-        except Exception as error:
-            print(f"[DB Xətası] Post statusu yenilənmədi: {error}")
-            return False
-
-    def get_due_scheduled_posts(self) -> List[dict]:
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                now_iso = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                cursor.execute(
-                    """
-                    SELECT * FROM admin_posts
-                    WHERE status = 'scheduled' AND scheduled_time <= ?
-                    ORDER BY scheduled_time ASC
-                    """,
-                    (now_iso,)
-                )
-                return [dict(row) for row in cursor.fetchall()]
-        except Exception as error:
-            print(f"[DB Xətası] Vaxtı çatmış postlar oxunmadı: {error}")
-            return []
-
-    def delete_admin_post(self, post_id: int):
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM post_images WHERE post_id = ?", (post_id,))
-                cursor.execute("DELETE FROM admin_posts WHERE id = ?", (post_id,))
-                conn.commit()
-                return True
-        except Exception as error:
-            print(f"[DB Xətası] Post silinmədi: {error}")
-            return False
-
+    def add_xp(self,guild_id,user_id,amount):
+        if not self.get_user(guild_id,user_id):self.upsert_user_identity(guild_id,user_id,'Naməlum','Naməlum')
+        user=self.get_user(guild_id,user_id); old_xp=int(user['xp']);old_level=int(user['level']);new_xp=old_xp+max(0,int(amount));new_level=self._level_from_xp(new_xp)
+        with self._connect() as c:c.execute("UPDATE users SET xp=?,level=? WHERE guild_id=? AND user_id=?",(new_xp,new_level,guild_id,user_id))
+        return new_xp,new_level,new_level>old_level
+    def get_user_rank(self,guild_id,user_id):
+        user=self.get_user(guild_id,user_id)
+        if not user:return 0
+        with self._connect() as c:return c.execute("SELECT COUNT(*)+1 FROM users WHERE guild_id=? AND xp>?",(guild_id,user['xp'])).fetchone()[0]
+    def get_level_leaderboard(self,guild_id,limit):
+        with self._connect() as c:rows=c.execute("SELECT user_id,username,display_name,xp,level FROM users WHERE guild_id=? ORDER BY level DESC,xp DESC LIMIT ?",(guild_id,limit)).fetchall()
+        return [dict(x) for x in rows]
+    def add_warning(self,guild_id,user_id,moderator_id,reason):
+        with self._connect() as c:c.execute("INSERT INTO warnings(guild_id,user_id,moderator_id,reason,date) VALUES(?,?,?,?,?)",(guild_id,user_id,moderator_id,reason,self._today()))
+    def get_warnings(self,guild_id,user_id,limit=10):
+        with self._connect() as c:rows=c.execute("SELECT id,user_id,moderator_id,reason,date FROM warnings WHERE guild_id=? AND user_id=? ORDER BY id DESC LIMIT ?",(guild_id,user_id,limit)).fetchall()
+        return [dict(x) for x in rows]
+    def get_warning_count(self,guild_id,user_id):
+        with self._connect() as c:return c.execute("SELECT COUNT(*) FROM warnings WHERE guild_id=? AND user_id=?",(guild_id,user_id)).fetchone()[0]
+    def get_warning_leaderboard(self,guild_id,limit=10):
+        with self._connect() as c:rows=c.execute("SELECT w.user_id,COALESCE(u.display_name,u.username,'Naməlum') display_name,COUNT(*) warning_count,MAX(w.date) latest_warning FROM warnings w LEFT JOIN users u ON u.guild_id=w.guild_id AND u.user_id=w.user_id WHERE w.guild_id=? GROUP BY w.user_id ORDER BY warning_count DESC,latest_warning DESC LIMIT ?",(guild_id,limit)).fetchall()
+        return [dict(x) for x in rows]
+    def delete_warning(self,guild_id,warning_id):
+        with self._connect() as c:return c.execute("DELETE FROM warnings WHERE guild_id=? AND id=?",(guild_id,warning_id)).rowcount>0
+    def clear_warnings(self,guild_id,user_id):
+        with self._connect() as c:return c.execute("DELETE FROM warnings WHERE guild_id=? AND user_id=?",(guild_id,user_id)).rowcount
+    def update_streak(self,guild_id,user_id):
+        today=self._today(); yesterday=(datetime.now(timezone.utc)-timedelta(days=1)).strftime('%Y-%m-%d');user=self.get_user(guild_id,user_id)
+        if not user:return 0,False,0
+        if user['last_streak_date']==today:return int(user['streak']),False,0
+        streak=int(user['streak'])+1 if user['last_streak_date']==yesterday else 1;bonus=min(streak*10,100)
+        with self._connect() as c:c.execute("UPDATE users SET streak=?,last_streak_date=?,highest_streak=MAX(highest_streak,?),xp=xp+? WHERE guild_id=? AND user_id=?",(streak,today,streak,bonus,guild_id,user_id))
+        return streak,True,bonus
+    def get_streak(self,guild_id,user_id):
+        user=self.get_user(guild_id,user_id)
+        if not user:return {'streak':0,'highest_streak':0,'active_today':False}
+        today=self._today();last=user['last_streak_date']; yesterday=(datetime.now(timezone.utc)-timedelta(days=1)).strftime('%Y-%m-%d')
+        return {'streak':int(user['streak']) if last in (today,yesterday) else 0,'highest_streak':int(user['highest_streak']),'active_today':last==today,'last_streak_date':last or 'Qeyd olunmayıb'}
+    def get_streak_leaderboard(self,guild_id,limit=10):
+        today=self._today();yesterday=(datetime.now(timezone.utc)-timedelta(days=1)).strftime('%Y-%m-%d')
+        with self._connect() as c:rows=c.execute("SELECT user_id,username,display_name,CASE WHEN last_streak_date IN (?,?) THEN streak ELSE 0 END current_streak,highest_streak FROM users WHERE guild_id=? AND (highest_streak>0 OR streak>0) ORDER BY current_streak DESC,highest_streak DESC,total_seconds DESC LIMIT ?",(today,yesterday,guild_id,limit)).fetchall()
+        return [dict(x) for x in rows]
+    def get_user_daily_history(self,guild_id,user_id,days=7):
+        dates=[(datetime.now(timezone.utc)-timedelta(days=days-1-i)).strftime('%Y-%m-%d') for i in range(days)]
+        with self._connect() as c:rows=c.execute("SELECT date,seconds FROM sessions WHERE guild_id=? AND user_id=? AND date>=?",(guild_id,user_id,dates[0])).fetchall()
+        data={x['date']:x['seconds'] for x in rows};return [{'date':d,'seconds':data.get(d,0)} for d in dates]
+    def add_temp_channel(self,channel_id,guild_id,owner_id):
+        with self._connect() as c:c.execute("INSERT INTO temp_channels VALUES(?,?,?,?) ON CONFLICT(channel_id) DO UPDATE SET owner_id=excluded.owner_id",(channel_id,guild_id,owner_id,datetime.now(timezone.utc).isoformat()))
+    def get_temp_channel(self,channel_id):
+        with self._connect() as c:row=c.execute("SELECT * FROM temp_channels WHERE channel_id=?",(channel_id,)).fetchone()
+        return dict(row) if row else None
+    def remove_temp_channel(self,channel_id):
+        with self._connect() as c:c.execute("DELETE FROM temp_channels WHERE channel_id=?",(channel_id,))
+    def get_guild_temp_channels(self,guild_id):
+        with self._connect() as c:rows=c.execute("SELECT * FROM temp_channels WHERE guild_id=?",(guild_id,)).fetchall()
+        return [dict(x) for x in rows]
+    def create_admin_post(self,guild_id,title,description,link_url,channel_id,channel_name,status='sent',discord_message_id=None,scheduled_time=None,error_message=None,images=None):
+        with self._connect() as c:
+            post_id=c.execute("INSERT INTO admin_posts(guild_id,title,description,link_url,channel_id,channel_name,status,discord_message_id,scheduled_time,created_at,error_message) VALUES(?,?,?,?,?,?,?,?,?,?,?)",(guild_id,title,description,link_url,channel_id,channel_name,status,discord_message_id,scheduled_time,datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),error_message)).lastrowid
+            for image in images or []:c.execute("INSERT INTO post_images(post_id,filename,image_url,image_bytes) VALUES(?,?,?,?)",(post_id,image.get('filename'),image.get('image_url'),image.get('image_bytes')))
+        return post_id
+    def get_admin_posts(self,limit=50,guild_id=None):
+        q='SELECT * FROM admin_posts';args=[]
+        if guild_id is not None:q+=' WHERE guild_id=?';args.append(guild_id)
+        q+=' ORDER BY id DESC LIMIT ?';args.append(limit)
+        with self._connect() as c:rows=c.execute(q,args).fetchall()
+        return [dict(x) for x in rows]
+    def get_admin_post(self,post_id,guild_id=None):
+        q='SELECT * FROM admin_posts WHERE id=?';args=[post_id]
+        if guild_id is not None:q+=' AND guild_id=?';args.append(guild_id)
+        with self._connect() as c:row=c.execute(q,args).fetchone()
+        return dict(row) if row else None
+    def get_post_images(self,post_id):
+        with self._connect() as c:rows=c.execute('SELECT id,post_id,filename,image_url,image_bytes FROM post_images WHERE post_id=?',(post_id,)).fetchall()
+        return [dict(x) for x in rows]
+    def update_scheduled_post_status(self,post_id,status,discord_message_id=None,error_message=None):
+        with self._connect() as c:c.execute('UPDATE admin_posts SET status=?,discord_message_id=COALESCE(?,discord_message_id),error_message=? WHERE id=?',(status,discord_message_id,error_message,post_id))
+    def get_due_scheduled_posts(self):
+        with self._connect() as c:rows=c.execute("SELECT * FROM admin_posts WHERE status='scheduled' AND scheduled_time<=?",(datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),)).fetchall()
+        return [dict(x) for x in rows]
+    def delete_admin_post(self,post_id,guild_id=None):
+        q='DELETE FROM admin_posts WHERE id=?';args=[post_id]
+        if guild_id is not None:q+=' AND guild_id=?';args.append(guild_id)
+        with self._connect() as c:return c.execute(q,args).rowcount>0
