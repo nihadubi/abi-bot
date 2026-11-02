@@ -524,6 +524,20 @@ class WelcomeRoleSwapView(discord.ui.View):
         if not str(remove_value).isdigit() or not str(add_value).isdigit():
             await interaction.response.send_message("Rol düyməsi hazırda konfiqurasiya edilməyib.", ephemeral=True)
             return
+        footer_text = str(interaction.message.embeds[0].footer.text or "") if interaction.message.embeds else ""
+        target_match = re.search(r"\bid\s+(\d+)\b", footer_text, re.IGNORECASE)
+        if not target_match:
+            await interaction.response.send_message("Logda rol dəyişdiriləcək üzv tapılmadı.", ephemeral=True)
+            return
+        try:
+            target = await guild.fetch_member(int(target_match.group(1)))
+        except discord.NotFound:
+            await interaction.response.send_message("Logdakı üzv artıq serverdə deyil.", ephemeral=True)
+            return
+        except (discord.Forbidden, discord.HTTPException):
+            logger.exception("Logdakı üzvün məlumatı alına bilmədi | guild=%s", guild.id)
+            await interaction.response.send_message("Üzvün məlumatını Discord-dan almaq mümkün olmadı.", ephemeral=True)
+            return
         remove_role = guild.get_role(int(remove_value))
         add_role = guild.get_role(int(add_value))
         bot_member = guild.me
@@ -534,22 +548,25 @@ class WelcomeRoleSwapView(discord.ui.View):
                 or remove_role >= bot_member.top_role or add_role >= bot_member.top_role):
             await interaction.response.send_message("Rol ayarları artıq uyğun deyil. Admin paneldən yenidən yoxlayın.", ephemeral=True)
             return
-        if remove_role not in member.roles:
-            await interaction.response.send_message(f"Bu düymə üçün əvvəlcə {remove_role.mention} rolunuz olmalıdır.", ephemeral=True)
+        if remove_role not in target.roles:
+            await interaction.response.send_message(f"Logdakı üzvdə {remove_role.mention} rolu yoxdur.", ephemeral=True)
             return
-        if member.top_role >= bot_member.top_role:
-            await interaction.response.send_message("Bot bu üzvün rollarını dəyişə bilmir.", ephemeral=True)
+        if target.top_role >= bot_member.top_role:
+            await interaction.response.send_message("Bot logdakı üzvün rollarını dəyişə bilmir.", ephemeral=True)
             return
-        updated_roles = [role for role in member.roles if role != remove_role and role != guild.default_role]
+        updated_roles = [role for role in target.roles if role != remove_role and role != guild.default_role]
         if add_role not in updated_roles:
             updated_roles.append(add_role)
         try:
-            await member.edit(roles=updated_roles, reason="Qarşılama mesajındakı rol dəyişmə düyməsi")
+            await target.edit(roles=updated_roles, reason="Yeni üzv logundakı rol dəyişmə düyməsi")
         except (discord.Forbidden, discord.HTTPException):
-            logger.exception("Düymə ilə rol dəyişdirilə bilmədi | guild=%s member=%s", guild.id, member.id)
+            logger.exception("Logdakı üzvün rolu düymə ilə dəyişdirilə bilmədi | guild=%s member=%s", guild.id, target.id)
             await interaction.response.send_message("Rol dəyişdirilə bilmədi. Botun Manage Roles icazəsini yoxlayın.", ephemeral=True)
             return
-        await interaction.response.send_message(f"{remove_role.name} rolu götürüldü, {add_role.name} rolu verildi.", ephemeral=True)
+        await interaction.response.send_message(
+            f"{target.mention} üzvündən {remove_role.name} götürüldü, {add_role.name} verildi.",
+            ephemeral=True,
+        )
 
 
 async def rotate_bot_status():
