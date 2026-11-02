@@ -710,14 +710,27 @@
               <input id="logsStart" type="date" class="px-3 py-2 text-sm" />
               <input id="logsEnd" type="date" class="px-3 py-2 text-sm" />
               <select id="logsEventFilter" class="px-3 py-2 text-sm"><option value="">Bütün hadisələr</option></select>
-              <input id="logsSearch" placeholder="Üzv, icraçı, detal..." class="px-3 py-2 text-sm" />
-              <button onclick="loadLogsData()" class="px-4 py-2 rounded-xl bg-cardHeader border border-borderDark text-sm">Axtar / yenilə</button>
+              <input id="logsSearch" placeholder="Üzv, icraçı, detal..." onkeydown="if(event.key==='Enter')loadLogsData(0)" class="px-3 py-2 text-sm" />
+              <button onclick="loadLogsData(0)" class="px-4 py-2 rounded-xl bg-cardHeader border border-borderDark text-sm">Axtar / yenilə</button>
             </div>
             <div class="grid lg:grid-cols-3 gap-4">
               <div class="lg:col-span-2 rounded-xl border border-borderDark p-4"><h4 class="eyebrow uppercase mb-3">Hadisələr üzrə say</h4><div id="logAnalytics" class="space-y-2 text-sm text-slate-300">Tarix seçin.</div></div>
               <div class="rounded-xl border border-borderDark p-4"><h4 class="eyebrow uppercase mb-3">Ən çox dəvət edənlər</h4><div id="logInviters" class="space-y-2 text-sm text-slate-300">Məlumat yoxdur.</div></div>
             </div>
-            <div class="overflow-x-auto rounded-xl border border-borderDark"><table class="w-full text-left text-sm"><thead class="bg-cardHeader text-xs uppercase text-slate-400 font-data"><tr><th class="p-3">Vaxt</th><th class="p-3">Hadisə</th><th class="p-3">İcraçı / üzv</th><th class="p-3">Detallar</th></tr></thead><tbody id="logsArchive"><tr><td colspan="4" class="p-6 text-center text-slate-500">Arxiv yüklənməyib.</td></tr></tbody></table></div>
+            <div class="rounded-xl border border-borderDark overflow-hidden">
+              <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-cardHeader border-b border-borderDark">
+                <div><h4 class="text-sm font-semibold text-white">Hadisə qeydləri</h4><p id="logsArchiveStatus" class="text-xs text-slate-400 mt-1">Arxiv yüklənməyib.</p></div>
+                <span class="text-[11px] text-slate-500">Tam məlumat üçün qeydi açın</span>
+              </div>
+              <div id="logsArchive" class="p-3 sm:p-4 space-y-3 max-h-[680px] overflow-y-auto">
+                <div class="p-8 text-center text-sm text-slate-500">Arxiv yüklənməyib.</div>
+              </div>
+              <div class="flex items-center justify-between gap-3 px-4 py-3 border-t border-borderDark bg-[#0c0d12]">
+                <button id="logsPrevPage" onclick="changeLogsPage(-1)" class="px-3 py-2 rounded-lg border border-borderDark text-xs text-slate-300 hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed" disabled>← Əvvəlki</button>
+                <span id="logsPageLabel" class="text-xs text-slate-400 font-data">Səhifə 0 / 0</span>
+                <button id="logsNextPage" onclick="changeLogsPage(1)" class="px-3 py-2 rounded-lg border border-borderDark text-xs text-slate-300 hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed" disabled>Növbəti →</button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -827,6 +840,7 @@
       } catch (e) { select.innerHTML = '<option value="">Serverlər yüklənmədi</option>'; }
     }
     async function loadLogSettings() {
+      logsArchiveOffset = 0;
       const guildId = document.getElementById("logsGuildSelect")?.value;
       if (!guildId) return;
       const box = document.getElementById("logSettingsGrid"); box.innerHTML = '<p class="text-sm text-slate-500">Yüklənir...</p>';
@@ -853,25 +867,136 @@
         const data = await res.json(); if (!data.success) throw new Error(data.error||"Saxlanmadı"); showToast(data.message||"Sazlamalar saxlandı", "success");
       } catch(e) { showToast(e.message, "error"); }
     }
-    async function loadLogsData() {
+    const LOGS_PAGE_SIZE = 25;
+    let logsArchiveOffset = 0;
+    let logsArchiveTotal = 0;
+
+    function formatLogArchiveTime(value) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? "Vaxt məlum deyil" : date.toLocaleString("az-AZ", {dateStyle:"medium", timeStyle:"short"});
+    }
+
+    function formatLogDetailValue(value) {
+      if (Array.isArray(value)) return value.length ? value.map(item => typeof item === "object" && item !== null ? JSON.stringify(item, null, 2) : String(item)).join("\n") : "Məlumat yoxdur";
+      if (value && typeof value === "object") return JSON.stringify(value, null, 2);
+      return String(value ?? "Məlumat yoxdur");
+    }
+
+    function renderLogArchiveDetail(key, value) {
+      if (key === "Mesajlar" && Array.isArray(value)) {
+        if (!value.length) return `<div class="rounded-xl border border-borderDark bg-[#0c0d12] p-3 text-xs text-slate-500">Mesaj detalları keşdə yoxdur.</div>`;
+        return `<div class="max-h-96 overflow-y-auto space-y-2">${value.map((message, index) => {
+          const author = message?.["müəllif"] || "Müəllif məlum deyil";
+          const text = message?.["mətn"] || "Mətn yoxdur və ya keşdə saxlanmayıb.";
+          const attachments = Array.isArray(message?.["qoşmalar"]) ? message["qoşmalar"] : [];
+          return `<div class="rounded-xl border border-borderDark bg-[#0c0d12] p-3 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2"><span class="text-xs font-semibold text-slate-200">${escapeHtml(author)}</span><span class="text-[10px] text-slate-500 font-data">${escapeHtml(message?.id || `Mesaj ${index + 1}`)}</span></div>
+            <p class="text-xs text-slate-300 whitespace-pre-wrap break-words">${escapeHtml(text)}</p>
+            ${attachments.length ? `<div class="space-y-1 border-t border-borderDark pt-2"><span class="text-[10px] uppercase tracking-wide text-slate-500">Qoşmalar</span>${attachments.map(item => `<div class="text-xs text-sky-300 break-all">${escapeHtml(item)}</div>`).join("")}</div>` : ""}
+          </div>`;
+        }).join("")}</div>`;
+      }
+      const formatted = formatLogDetailValue(value);
+      return `<div class="rounded-xl border border-borderDark bg-[#0c0d12] p-3"><dt class="text-[10px] uppercase tracking-wide text-slate-500 mb-1">${escapeHtml(key)}</dt><dd class="text-xs text-slate-300 whitespace-pre-wrap break-words">${escapeHtml(formatted)}</dd></div>`;
+    }
+
+    function renderLogArchiveEvent(event) {
+      const key = String(event.event_key || "");
+      const label = logLabels[key] || key || "Hadisə";
+      const category = key.startsWith("moderation_") ? "Moderasiya"
+        : key.startsWith("member_") ? "Üzvlər"
+        : key.startsWith("invite_") ? "Dəvətlər"
+        : key.startsWith("message_") ? "Mesajlar"
+        : key.startsWith("voice_") ? "Səs"
+        : "Sistem";
+      const accent = key.startsWith("moderation_") ? "text-rose-300 bg-rose-500/10 border-rose-500/20"
+        : key.startsWith("member_") || key.startsWith("invite_") ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+        : key.startsWith("message_") ? "text-sky-300 bg-sky-500/10 border-sky-500/20"
+        : key.startsWith("voice_") ? "text-violet-300 bg-violet-500/10 border-violet-500/20"
+        : "text-amber-300 bg-amber-500/10 border-amber-500/20";
+      const details = event.details && typeof event.details === "object" ? event.details : {};
+      const quickDetails = Object.entries(details).filter(([name]) => name !== "Mesajlar").slice(0, 2)
+        .map(([name, value]) => `${name}: ${formatLogDetailValue(value)}`).join(" · ");
+      const people = [
+        event.actor_name ? `<span class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2 py-1"><span class="text-slate-500">İcraçı</span><span class="text-slate-200">${escapeHtml(event.actor_name)}</span></span>` : "",
+        event.target_name ? `<span class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2 py-1"><span class="text-slate-500">Üzv</span><span class="text-slate-200">${escapeHtml(event.target_name)}</span></span>` : "",
+        event.channel_name ? `<span class="inline-flex items-center gap-1 rounded-lg bg-white/5 px-2 py-1"><span class="text-slate-500">Kanal</span><span class="text-slate-200">#${escapeHtml(event.channel_name)}</span></span>` : "",
+      ].filter(Boolean).join("");
+      const detailRows = Object.entries(details).map(([name, value]) => renderLogArchiveDetail(name, value)).join("");
+      return `<article class="rounded-xl border border-borderDark bg-[#111217] hover:border-white/15 transition-colors">
+        <div class="p-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex items-start gap-3 min-w-0">
+              <span class="shrink-0 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold ${accent}">${escapeHtml(category)}</span>
+              <div class="min-w-0"><h5 class="text-sm font-semibold text-white break-words">${escapeHtml(event.title || label)}</h5>
+                <p class="text-[11px] text-slate-500 mt-1">${people || "İcraçı və üzv məlumatı yoxdur"}</p></div>
+            </div>
+            <time class="shrink-0 text-[11px] text-slate-400 font-data">${escapeHtml(formatLogArchiveTime(event.created_at))}</time>
+          </div>
+          ${quickDetails ? `<p class="mt-3 text-xs text-slate-400 whitespace-pre-wrap break-words line-clamp-2">${escapeHtml(quickDetails)}</p>` : ""}
+          <details class="group mt-3 border-t border-borderDark pt-3">
+            <summary class="cursor-pointer list-none flex items-center justify-between gap-3 text-xs text-violet-300 hover:text-violet-200"><span>Hadisə məlumatları</span><span class="group-open:rotate-180 transition-transform">⌄</span></summary>
+            <dl class="mt-3 grid gap-2 sm:grid-cols-2">${detailRows || `<div class="text-xs text-slate-500">Əlavə detal yoxdur.</div>`}</dl>
+          </details>
+        </div>
+      </article>`;
+    }
+
+    function updateLogsPager() {
+      const pageCount = Math.ceil(logsArchiveTotal / LOGS_PAGE_SIZE);
+      const currentPage = pageCount ? Math.floor(logsArchiveOffset / LOGS_PAGE_SIZE) + 1 : 0;
+      const previous = document.getElementById("logsPrevPage");
+      const next = document.getElementById("logsNextPage");
+      previous.disabled = logsArchiveOffset <= 0;
+      next.disabled = logsArchiveOffset + LOGS_PAGE_SIZE >= logsArchiveTotal;
+      document.getElementById("logsPageLabel").textContent = `Səhifə ${currentPage} / ${pageCount}`;
+    }
+
+    function changeLogsPage(direction) {
+      const lastOffset = Math.max(0, (Math.ceil(logsArchiveTotal / LOGS_PAGE_SIZE) - 1) * LOGS_PAGE_SIZE);
+      logsArchiveOffset = Math.max(0, Math.min(lastOffset, logsArchiveOffset + direction * LOGS_PAGE_SIZE));
+      loadLogsData(logsArchiveOffset);
+    }
+
+    async function loadLogsData(offset = logsArchiveOffset) {
       const guildId = document.getElementById("logsGuildSelect")?.value; if (!guildId) return;
+      logsArchiveOffset = Math.max(0, Number(offset) || 0);
+      const archiveRoot = document.getElementById("logsArchive");
+      archiveRoot.innerHTML = '<div class="p-8 text-center text-sm text-slate-500">Log qeydləri yüklənir...</div>';
       const startDate = document.getElementById("logsStart").value, endDate = document.getElementById("logsEnd").value;
       const start = startDate ? `${startDate}T00:00:00+00:00` : "";
       const end = endDate ? `${endDate}T23:59:59.999999+00:00` : "";
-      const params = new URLSearchParams({guild_id:guildId, start, end, event:document.getElementById("logsEventFilter").value, q:document.getElementById("logsSearch").value, limit:"100"});
+      const params = new URLSearchParams({guild_id:guildId, start, end, event:document.getElementById("logsEventFilter").value, q:document.getElementById("logsSearch").value, limit:String(LOGS_PAGE_SIZE), offset:String(logsArchiveOffset)});
       try {
         const [ar, an] = await Promise.all([fetch(`/admin/api/logs/events?${params}`), fetch(`/admin/api/logs/analytics?guild_id=${guildId}&start=${start}&end=${end}`)]);
         const archive = await ar.json(), analytics = await an.json();
         if (!archive.success) throw new Error(archive.error||"Arxiv oxunmadı");
+        logsArchiveTotal = Number(archive.total) || 0;
         const counts = Object.fromEntries((analytics.by_event||[]).map(x=>[x.event_key, Number(x.count)]));
-        const total = Object.values(counts).reduce((a,b)=>a+b,0); const join = counts.member_join||0; const leave = counts.member_leave||0;
-        document.getElementById("logSummary").innerHTML = [["Nəticə",total],["Giriş",join],["Çıxış",leave],["Bu səhifə",archive.events.length]].map(x=>`<div class="glass-card rounded-xl p-4"><p class="text-xs text-slate-400">${x[0]}</p><p class="text-2xl font-bold text-violet-300 font-display">${x[1].toLocaleString()}</p></div>`).join("");
-        document.getElementById("logsArchive").innerHTML = archive.events.length ? archive.events.map(e=>`<tr><td class="p-3 whitespace-nowrap text-xs text-slate-400 font-data">${new Date(e.created_at).toLocaleString()}</td><td class="p-3 font-semibold text-slate-200">${escapeHtml(logLabels[e.event_key]||e.event_key)}</td><td class="p-3 text-xs">${escapeHtml(e.actor_name||"—")} ${e.target_name?`→ ${escapeHtml(e.target_name)}`:""}</td><td class="p-3 text-xs text-slate-400">${escapeHtml(Object.entries(e.details||{}).map(([k,v])=>`${k}: ${typeof v==="object"?JSON.stringify(v):v}`).join(" · ").slice(0,600)||e.title)}</td></tr>`).join("") : '<tr><td colspan="4" class="p-6 text-center text-slate-500">Bu filtr üçün hadisə yoxdur.</td></tr>';
+        const join = counts.member_join||0; const leave = counts.member_leave||0;
+        const currentPage = logsArchiveTotal ? Math.floor(logsArchiveOffset / LOGS_PAGE_SIZE) + 1 : 0;
+        const pageCount = Math.ceil(logsArchiveTotal / LOGS_PAGE_SIZE);
+        const selectedEvent = document.getElementById("logsEventFilter").value;
+        document.getElementById("logSummary").innerHTML = [["Tapılan hadisə",logsArchiveTotal],["Səhifə",`${currentPage} / ${pageCount}`],["Giriş (tarix üzrə)",join],["Çıxış (tarix üzrə)",leave]].map(([label,value])=>`<div class="glass-card rounded-xl p-4"><p class="text-xs text-slate-400">${label}</p><p class="text-xl sm:text-2xl font-bold text-violet-300 font-display truncate" title="${escapeHtml(value)}">${typeof value === "number" ? value.toLocaleString() : escapeHtml(value)}</p></div>`).join("");
+        const firstResult = logsArchiveTotal ? logsArchiveOffset + 1 : 0;
+        const lastResult = logsArchiveOffset + archive.events.length;
+        document.getElementById("logsArchiveStatus").textContent = logsArchiveTotal
+          ? `${logsArchiveTotal.toLocaleString()} nəticə · ${firstResult}–${lastResult} göstərilir${selectedEvent ? ` · ${logLabels[selectedEvent] || selectedEvent}` : ""}`
+          : "Bu filtr üçün hadisə tapılmadı.";
+        archiveRoot.innerHTML = archive.events.length
+          ? archive.events.map(renderLogArchiveEvent).join("")
+          : '<div class="p-8 text-center"><div class="text-2xl mb-2">⌕</div><p class="text-sm font-medium text-slate-300">Hadisə tapılmadı</p><p class="text-xs text-slate-500 mt-1">Filtrləri dəyişib yenidən axtarın.</p></div>';
+        updateLogsPager();
         if (analytics.success) {
           document.getElementById("logAnalytics").innerHTML = analytics.by_event.length ? analytics.by_event.map(x=>`<div class="flex items-center justify-between gap-3"><span>${escapeHtml(logLabels[x.event_key]||x.event_key)}</span><span class="font-data text-violet-300">${x.count}</span></div>`).join("") : "Hadisə yoxdur.";
           document.getElementById("logInviters").innerHTML = analytics.top_inviters.length ? analytics.top_inviters.map((x,i)=>`<div class="flex items-center justify-between gap-2"><span>${i+1}. ${escapeHtml(x.actor_name||"Naməlum")}</span><b class="text-emerald-300">${x.count}</b></div>`).join("") : "Məlumat yoxdur.";
         }
-      } catch(e) { document.getElementById("logsArchive").innerHTML = `<tr><td colspan="4" class="p-5 text-rose-300">${escapeHtml(e.message)}</td></tr>`; }
+      } catch(e) {
+        archiveRoot.innerHTML = `<div class="p-5 text-sm text-rose-300">${escapeHtml(e.message)}</div>`;
+        document.getElementById("logsArchiveStatus").textContent = "Arxiv yüklənmədi.";
+        logsArchiveTotal = 0;
+        updateLogsPager();
+      }
     }
     /* ==================== OVERVIEW & SYSTEM STATS ==================== */
     async function loadSystemStats() {
