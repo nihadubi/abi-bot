@@ -610,6 +610,7 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
+    logger.info("Üzv qoşuldu | guild=%s member=%s", member.guild.id, member.id)
     auto_role_value = db.get_guild_setting(member.guild.id, "autorole", "")
     if str(auto_role_value).isdigit():
         auto_role = member.guild.get_role(int(auto_role_value))
@@ -629,8 +630,17 @@ async def on_member_join(member: discord.Member):
     if str(remove_role_value).isdigit() and str(add_role_value).isdigit():
         button_label = db.get_guild_setting(member.guild.id, "welcome_button_label", "Rolu dəyiş")
         role_swap_view = WelcomeRoleSwapView(button_label)
-    if str(welcome_channel_value).isdigit() and (welcome_message or role_swap_view):
+    welcome_enabled = bool(welcome_message or role_swap_view)
+    if welcome_enabled and not str(welcome_channel_value).isdigit():
+        logger.warning("Qarşılama mesajı/düyməsi qurulub, amma kanal seçilməyib | guild=%s", member.guild.id)
+    if str(welcome_channel_value).isdigit() and welcome_enabled:
         welcome_channel = member.guild.get_channel(int(welcome_channel_value))
+        if welcome_channel is None:
+            try:
+                welcome_channel = await member.guild.fetch_channel(int(welcome_channel_value))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                logger.exception("Qarşılama kanalı tapılmadı | guild=%s channel=%s",
+                                 member.guild.id, welcome_channel_value)
         if isinstance(welcome_channel, discord.TextChannel):
             replacements = {
                 "{mention}": member.mention,
@@ -651,6 +661,9 @@ async def on_member_join(member: discord.Member):
             except (discord.Forbidden, discord.HTTPException):
                 logger.exception("Qarşılama mesajı göndərilə bilmədi | guild=%s channel=%s member=%s",
                                  member.guild.id, welcome_channel.id, member.id)
+        else:
+            logger.warning("Qarşılama kanalı mətn kanalı deyil və ya əlçatan deyil | guild=%s channel=%s",
+                           member.guild.id, welcome_channel_value)
 
     invite_info = await identify_join_invite(member.guild)
     inviter = None

@@ -133,7 +133,7 @@
 
         <button id="tabBtnSettings" onclick="switchTab('settings')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8m7 0a11 11 0 11-22 0 11 11 0 0122 0z"/></svg>
-          <span>Üzv və log dizaynı</span>
+          <span>Üzv sazlamaları</span>
         </button>
 
         <button id="tabBtnBots" onclick="switchTab('bots')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
@@ -199,7 +199,7 @@
         <button onclick="switchTab('history')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Tarixçə</button>
         <button onclick="switchTab('moderation')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Moderasiya</button>
         <button onclick="switchTab('structure')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Struktur</button>
-        <button onclick="switchTab('settings')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Üzv və log</button>
+        <button onclick="switchTab('settings')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Üzv sazlamaları</button>
         <button onclick="switchTab('bots')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Botlar</button>
         <button onclick="switchTab('logs')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Loglar</button>
       </div>
@@ -702,11 +702,11 @@
 
         <section id="tabContentSettings" class="hidden space-y-6">
           <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
-            <div><h2 class="font-display text-lg font-semibold text-white">Üzv və log dizaynı</h2><p class="text-xs text-slate-400 mt-1">Avtomatik rol, qarşılama mesajı və Discord log embed görünüşü.</p></div>
+            <div><h2 class="font-display text-lg font-semibold text-white">Üzv sazlamaları</h2><p class="text-xs text-slate-400 mt-1">Avtomatik rol, qarşılama mesajı və rol düyməsi.</p></div>
             <select id="settingsGuildSelect" onchange="loadServerSettings()" class="px-3 py-2 rounded-xl text-sm min-w-56"><option>Serverlər yüklənir...</option></select>
           </div>
 
-          <div class="grid xl:grid-cols-2 gap-5">
+          <div class="grid grid-cols-1 gap-5">
             <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
               <div><h3 class="font-bold text-white">Yeni üzv</h3><p class="text-xs text-slate-400 mt-1">Boş seçim funksiyanı söndürür. Mətn dəyişənləri: <code>{mention}</code>, <code>{username}</code>, <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>, <code>{id}</code>.</p></div>
               <label class="block text-xs text-slate-400">Avtomatik veriləcək rol<select id="settingsAutorole" class="mt-1 w-full px-3 py-2 text-sm"></select></label>
@@ -722,20 +722,6 @@
               <button onclick="saveServerSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm text-white">Sazlamaları yadda saxla</button>
             </div>
 
-            <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
-              <div><h3 class="font-bold text-white">Discord log görünüşü</h3><p class="text-xs text-slate-400 mt-1">Seçilmiş hadisə üçün header, başlıq, footer və rəngi dəyiş. Boş sahələr standart görünüşdən istifadə edir.</p></div>
-              <label class="block text-xs text-slate-400">Log hadisəsi<select id="settingsLogEvent" onchange="loadLogTemplateForm()" class="mt-1 w-full px-3 py-2 text-sm"></select></label>
-              <label class="block text-xs text-slate-400">Header<textarea id="settingsLogHeader" rows="2" maxlength="256" placeholder="Məsələn: {group}" class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
-              <p class="-mt-3 text-[11px] text-slate-500">Header dəyişəni: <code>{group}</code></p>
-              <label class="block text-xs text-slate-400">Başlıq<textarea id="settingsLogTitle" rows="2" maxlength="256" placeholder="{title}" class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
-              <p class="-mt-3 text-[11px] text-slate-500">Dəyişənlər: <code>{title}</code>, <code>{event}</code></p>
-              <label class="block text-xs text-slate-400">Məzmun şablonu<textarea id="settingsLogBody" rows="5" maxlength="2000" placeholder="{actor} → {target}\n{details}" class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
-              <p class="-mt-3 text-[11px] text-slate-500">Dəyişənlər: <code>{actor}</code>, <code>{target}</code>, <code>{channel}</code>, <code>{details}</code>, <code>{event}</code>, <code>{group}</code>, <code>{title}</code>. Boş saxlasan standart məzmun göstərilir.</p>
-              <label class="block text-xs text-slate-400">Footer<textarea id="settingsLogFooter" rows="2" maxlength="400" placeholder="{group} · id {id}" class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
-              <p class="-mt-3 text-[11px] text-slate-500">Dəyişənlər: <code>{group}</code>, <code>{id}</code></p>
-              <label class="block text-xs text-slate-400">Embed rəngi (#RRGGBB)<input id="settingsLogColor" maxlength="7" placeholder="#5865F2" class="mt-1 w-full px-3 py-2 text-sm" /></label>
-              <button onclick="saveServerSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm text-white">Sazlamaları yadda saxla</button>
-            </div>
           </div>
         </section>
 
@@ -800,7 +786,7 @@
     const pageHeadings = {
       overview: "Ümumi baxış", create: "Yeni post", history: "Tarixçə",
       moderation: "Moderasiya & rollar", structure: "Server strukturu",
-      bots: "Bot bələdçiləri", logs: "Hadisə jurnalı", settings: "Üzv və log dizaynı"
+      bots: "Bot bələdçiləri", logs: "Hadisə jurnalı", settings: "Üzv sazlamaları"
     };
 
     document.addEventListener("DOMContentLoaded", async () => {
@@ -875,7 +861,6 @@
       else if (currentTab === "settings") loadServerSettings();
     }
 
-    let serverSettingsTemplates = {};
     async function loadServerSettings() {
       const guildSelect = document.getElementById("settingsGuildSelect");
       try {
@@ -906,35 +891,12 @@
         channelSelect.innerHTML = channelOptions;
         channelSelect.value = data.welcome_channel_id || "";
         document.getElementById("settingsWelcomeMessage").value = data.welcome_message || "";
-        serverSettingsTemplates = data.templates || {};
-        const eventSelect = document.getElementById("settingsLogEvent");
-        const previous = eventSelect.value;
-        eventSelect.innerHTML = data.events.map(event => `<option value="${event.key}">${escapeHtml(event.group)} · ${escapeHtml(event.label)}</option>`).join("");
-        if (previous && data.events.some(event => event.key === previous)) eventSelect.value = previous;
-        loadLogTemplateForm();
       } catch (error) {
         showToast(error.message || "Server sazlamaları yüklənmədi.", "error");
       }
     }
 
-    function loadLogTemplateForm() {
-      const template = serverSettingsTemplates[document.getElementById("settingsLogEvent")?.value] || {};
-      document.getElementById("settingsLogHeader").value = template.header || "";
-      document.getElementById("settingsLogTitle").value = template.title || "";
-      document.getElementById("settingsLogBody").value = template.body || "";
-      document.getElementById("settingsLogFooter").value = template.footer || "";
-      document.getElementById("settingsLogColor").value = template.color || "";
-    }
-
     async function saveServerSettings() {
-      const template = {
-        header: document.getElementById("settingsLogHeader").value,
-        title: document.getElementById("settingsLogTitle").value,
-        body: document.getElementById("settingsLogBody").value,
-        footer: document.getElementById("settingsLogFooter").value,
-        color: document.getElementById("settingsLogColor").value,
-      };
-      const eventKey = document.getElementById("settingsLogEvent").value;
       try {
         const res = await fetch("/admin/api/server-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
           guild_id:document.getElementById("settingsGuildSelect").value,
@@ -945,11 +907,10 @@
           welcome_button_add_role:document.getElementById("settingsSwapAddRole").value,
           welcome_button_label:document.getElementById("settingsSwapButtonLabel").value,
           welcome_button_allowed_role:document.getElementById("settingsSwapAllowedRole").value,
-          event_key:eventKey, template, csrf_token:globalCsrfToken
+          csrf_token:globalCsrfToken
         })});
         const data = await res.json();
         if (!data.success) throw new Error(data.error || "Saxlanmadı.");
-        serverSettingsTemplates[eventKey] = template;
         showToast(data.message || "Sazlamalar saxlanıldı.", "success");
       } catch(error) { showToast(error.message, "error"); }
     }

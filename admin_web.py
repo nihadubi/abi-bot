@@ -781,18 +781,10 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
         roles = [{"id": str(role.id), "name": role.name, "editable": _manageable_role(guild, role)}
                  for role in sorted(guild.roles, key=lambda item: item.position, reverse=True)
                  if role != guild.default_role]
-        templates = {}
-        for event in LOG_EVENTS:
-            raw = db.get_guild_setting(guild.id, f"log_template:{event['key']}", "{}")
-            try:
-                templates[event["key"]] = json.loads(raw)
-            except (TypeError, ValueError, json.JSONDecodeError):
-                templates[event["key"]] = {}
         return web.json_response({
             "success": True,
             "channels": channels,
             "roles": roles,
-            "events": LOG_EVENTS,
             "autorole_id": db.get_guild_setting(guild.id, "autorole", ""),
             "welcome_channel_id": db.get_guild_setting(guild.id, "welcome_channel", ""),
             "welcome_message": db.get_guild_setting(guild.id, "welcome_message", ""),
@@ -800,7 +792,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             "welcome_button_add_role": db.get_guild_setting(guild.id, "welcome_button_add_role", ""),
             "welcome_button_label": db.get_guild_setting(guild.id, "welcome_button_label", "Rolu dəyiş"),
             "welcome_button_allowed_role": db.get_guild_setting(guild.id, "welcome_button_allowed_role", ""),
-            "templates": templates,
         })
 
     @require_auth
@@ -869,18 +860,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
         if len(welcome_message) > 1800:
             return web.json_response({"success": False, "error": "Qarşılama mətni 1800 simvoldan uzun ola bilməz."}, status=400)
 
-        event_key = str(data.get("event_key", ""))
-        template = data.get("template", {})
-        if event_key not in LOG_EVENT_MAP or not isinstance(template, dict):
-            return web.json_response({"success": False, "error": "Log şablonu seçimi düzgün deyil."}, status=400)
-        template = {key: str(template.get(key, "")).strip() for key in ("header", "title", "body", "footer", "color")}
-        if len(template["header"]) > 256 or len(template["title"]) > 256 or len(template["footer"]) > 2048:
-            return web.json_response({"success": False, "error": "Header, başlıq və ya footer uzunluğu limiti keçib."}, status=400)
-        if len(template["body"]) > 2000:
-            return web.json_response({"success": False, "error": "Log mətni 2000 simvoldan uzun ola bilməz."}, status=400)
-        if template["color"] and not re.fullmatch(r"#?[0-9a-fA-F]{6}", template["color"]):
-            return web.json_response({"success": False, "error": "Rəng #RRGGBB formatında olmalıdır."}, status=400)
-
         try:
             db.set_guild_settings(guild.id, {
                 "autorole": role_id,
@@ -890,7 +869,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
                 "welcome_button_add_role": add_role_id,
                 "welcome_button_label": button_label or "Rolu dəyiş",
                 "welcome_button_allowed_role": allowed_role_id,
-                f"log_template:{event_key}": json.dumps(template, ensure_ascii=False),
             })
         except Exception:
             logger.exception("Server sazlamaları yadda saxlanmadı | guild=%s", guild.id)
