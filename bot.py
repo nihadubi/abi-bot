@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 from database import Database
 import graphics
-from logging_system import LOG_EVENT_MAP, emit_log, invite_snapshot, format_audit_changes
+
 
 
 load_dotenv()
@@ -104,13 +104,14 @@ def is_exempt_member(member: discord.Member) -> bool:
 
 
 async def send_error_card(ctx, title: str, description: str):
-    # Log dizaynı ilə eyni, sadə ✦ başlıq + xətt görünüşü (ban/unban daxil bütün əmrlər)
+    # Gözəl qırmızı/narıncı xəta kartı
     embed = discord.Embed(
-        description=f"✦ **{title}**\n{'┈' * 14}\n{description}",
+        title=f"❌ {title}",
+        description=description,
         color=ERROR_COLOR,
         timestamp=datetime.now(timezone.utc)
     )
-    embed.set_footer(text=f"sorğulayan: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
+    embed.set_footer(text=f"Sorğulayan: {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
     await ctx.send(embed=embed)
 
 
@@ -754,11 +755,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
         event_key, title = "guild_update", "Server ayarları dəyişdirildi"
     if event_key:
         changes = getattr(entry, "changes", None)
-        # Silinmə hadisələrində (rol/kanal) HƏR xassə "→ —" olaraq görünür —
-        # bu, konkret dəyişiklik deyil, obyektin özünün yox olmasıdır, ona görə
-        # bu bölməni silinmə hallarında göstərmirik. "rol"/"kanal" sətri onsuz
-        # da hansı obyektin silindiyini bildirir.
-        if changes and not event_key.endswith("_delete"):
+        if changes:
             formatted = format_audit_changes(changes)
             if formatted:
                 details["Dəyişikliklər"] = formatted
@@ -1182,66 +1179,31 @@ async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstəril
         await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
 
 
-def parse_ban_user_id(value: str):
-    value = value.strip()
-    mention = re.fullmatch(r"<@!?([0-9]+)>", value)
-    raw_id = mention.group(1) if mention else value
-    if not raw_id.isdecimal():
-        return None
-    user_id = int(raw_id)
-    return user_id if 0 < user_id < 2**64 else None
-
-
-async def resolve_ban_target(guild: discord.Guild, user_id: int):
-    member = guild.get_member(user_id)
-    if member:
-        return member
-    try:
-        return await guild.fetch_member(user_id)
-    except discord.NotFound:
-        try:
-            return await bot.fetch_user(user_id)
-        except discord.NotFound:
-            return discord.Object(id=user_id)
-
-
-def ban_target_display(target, user_id: int):
-    name = getattr(target, "display_name", None) or getattr(target, "name", None) or f"ID {user_id}"
-    mention = getattr(target, "mention", None) or f"<@{user_id}>"
-    avatar = getattr(getattr(target, "display_avatar", None), "url", None)
-    return name, mention, avatar
-
-
 @bot.command(name="ban")
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, user_or_id: str, *, reason: str = "Səbəb göstərilməyib"):
-    user_id = parse_ban_user_id(user_or_id)
-    if user_id is None:
-        await send_error_card(ctx, "İstifadə xətası", "Üzv mention-ı və ya düzgün Discord user ID-si yazın.")
+async def ban(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
+    # Serverdən istifadəçini ban edirik
+    if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
+        await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.")
         return
 
     try:
-        target = await resolve_ban_target(ctx.guild, user_id)
-        if isinstance(target, discord.Member) and target.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
-            await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.")
-            return
-        await ctx.guild.ban(target, reason=f"{ctx.author} | {reason}", delete_message_days=0)
-        logger.info(f"Ban olundu | mod={ctx.author.id} user={user_id} reason={reason}")
-        name, mention, avatar = ban_target_display(target, user_id)
+        await member.ban(reason=f"{ctx.author} | {reason}", delete_message_days=0)
+        logger.info(f"Ban olundu | mod={ctx.author.id} user={member.id} reason={reason}")
+
         embed = discord.Embed(
             title="🔨 Üzv Ban Edildi",
-            description=f"**Banlanan üzv:** {mention} (\n{user_id})\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
+            description=f"**Banlanan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {ctx.author.mention}",
             color=0xED4245,
             timestamp=datetime.now(timezone.utc)
         )
-        embed.set_author(name=name, icon_url=avatar)
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await ctx.send(embed=embed)
     except discord.Forbidden:
-        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini ban etməyə səlahiyyəti çatmır (Rol iyerarxiyasını yoxlayın).")
-    except discord.NotFound:
-        await send_error_card(ctx, "Tapılmadı", "Bu ID-yə uyğun Discord istifadəçisi tapılmadı.")
+        await send_error_card(ctx, "Yetki Xətası", "Botun bu istifadəçini ban etməyə səlahiyyəti çatmır (Rol iyerarxiyasında botun rolu daha aşağıdadır).")
     except Exception as e:
         await send_error_card(ctx, "Xəta", f"Əməliyyat uğursuz oldu: {e}")
+
 
 @bot.command(name="unban")
 @commands.has_permissions(ban_members=True)
@@ -1624,58 +1586,29 @@ async def slash_kick(interaction: discord.Interaction, member: discord.Member, r
         await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
 
 
-@bot.tree.command(name="ban", description="Üzvü və ya Discord user ID-sini serverdən ban edir.")
+@bot.tree.command(name="ban", description="İstifadəçini serverdən qadağan edir (Ban).")
 @app_commands.checks.has_permissions(ban_members=True)
-@app_commands.describe(
-    member="Serverdə olan üzv (istəyə bağlı)",
-    user_id="Discord user ID-si; üzv serverdə olmasa da istifadə edilə bilər",
-    reason="Ban səbəbi",
-)
-async def slash_ban(
-    interaction: discord.Interaction,
-    member: discord.Member = None,
-    user_id: str = None,
-    reason: str = "Səbəb göstərilməyib",
-):
-    if (member is None) == (user_id is None):
-        await interaction.response.send_message("Üzv seçin və ya user ID yazın (yalnız birini).", ephemeral=True)
-        return
-
-    if member is not None:
-        target = member
-        resolved_id = member.id
-    else:
-        resolved_id = parse_ban_user_id(user_id)
-        if resolved_id is None:
-            await interaction.response.send_message("Düzgün Discord user ID-si yazın.", ephemeral=True)
-            return
-        try:
-            target = await resolve_ban_target(interaction.guild, resolved_id)
-        except discord.Forbidden:
-            await interaction.response.send_message("İstifadəçi məlumatını almaq mümkün olmadı.", ephemeral=True)
-            return
-
-    if isinstance(target, discord.Member) and target.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
-        await interaction.response.send_message("Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.", ephemeral=True)
+@app_commands.describe(member="Serverdən ban ediləcək üzv", reason="Ban səbəbi")
+async def slash_ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Səbəb göstərilməyib"):
+    if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini ban edə bilməzsən.", ephemeral=True)
         return
 
     try:
-        await interaction.guild.ban(target, reason=f"{interaction.user} | {reason}", delete_message_days=0)
-        name, mention, avatar = ban_target_display(target, resolved_id)
+        await member.ban(reason=f"{interaction.user} | {reason}", delete_message_days=0)
         embed = discord.Embed(
             title="🔨 Üzv Ban Edildi",
-            description=f"**Banlanan üzv:** {mention} (`{resolved_id}`)\n**Səbəb:** {reason}\n**Moderator:** {interaction.user.mention}",
+            description=f"**Banlanan Üzv:** {member.mention} (`{member.id}`)\n**Səbəb:** {reason}\n**Moderator:** {interaction.user.mention}",
             color=0xED4245,
             timestamp=datetime.now(timezone.utc)
         )
-        embed.set_author(name=name, icon_url=avatar)
+        embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
     except discord.Forbidden:
-        await interaction.response.send_message("Botun bu istifadəçini ban etməyə səlahiyyəti çatmır.", ephemeral=True)
-    except discord.NotFound:
-        await interaction.response.send_message("Bu ID-yə uyğun Discord istifadəçisi tapılmadı.", ephemeral=True)
+        await interaction.response.send_message("❌ Botun bu istifadəçini ban etməyə səlahiyyəti çatmır.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"Xəta: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ Xəta: {e}", ephemeral=True)
+
 
 @bot.tree.command(name="mute", description="İstifadəçiyə timeout tətbiq edir (Mute).")
 @app_commands.checks.has_permissions(moderate_members=True)
