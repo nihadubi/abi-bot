@@ -5,7 +5,7 @@ import os
 import re
 import sqlite3
 from types import SimpleNamespace
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -47,6 +47,8 @@ intents.moderation = True
 intents.invites = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None, max_messages=10000)
+DELETED_MESSAGE_CACHE_LIMIT = 50000
+deleted_message_cache = OrderedDict()
 # Baza faylını layihə qovluğunda saxlayırıq. SQLite backup açıq DB-dən də tutarlı
 # snapshot götürür; xam DB/WAL/SHM fayllarını os.replace ilə daşımaq olmaz.
 configured_db_path = os.getenv("DATABASE_PATH", "").strip()
@@ -765,6 +767,7 @@ async def on_invite_delete(invite: discord.Invite):
 async def on_message_edit(before: discord.Message, after: discord.Message):
     if before.guild is None:
         return
+    _cache_deleted_message(after)
     old_attachments = [(item.filename, item.url) for item in before.attachments]
     new_attachments = [(item.filename, item.url) for item in after.attachments]
     if before.content == after.content and old_attachments == new_attachments:
@@ -810,6 +813,21 @@ def deleted_message_text(message: discord.Message) -> str:
     return "Mətn hissəsi boşdur və ya bot üçün əlçatan deyil."
 
 
+def _cache_deleted_message(message):
+    """Keep recent message contents beyond discord.py's smaller internal cache."""
+    if message.guild is None:
+        return
+    deleted_message_cache[message.id] = {
+        "guild_id": message.guild.id,
+        "author_name": str(message.author),
+        "content": deleted_message_text(message),
+        "attachments": [f"{item.filename}: {item.url}" for item in message.attachments],
+    }
+    deleted_message_cache.move_to_end(message.id)
+    while len(deleted_message_cache) > DELETED_MESSAGE_CACHE_LIMIT:
+        deleted_message_cache.popitem(last=False)
+
+
 @bot.event
 async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     if payload.guild_id is None:
@@ -818,13 +836,16 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     if guild is None:
         return
     message = payload.cached_message
+    snapshot = deleted_message_cache.pop(payload.message_id, None)
     author = message.author if message else None
     channel = guild.get_channel(payload.channel_id)
-    attachments = [f"{item.filename}: {item.url}" for item in message.attachments] if message else []
+    attachments = ([f"{item.filename}: {item.url}" for item in message.attachments] if message
+                   else (snapshot or {}).get("attachments", []))
     details = {"Mesaj ID": str(payload.message_id),
-               "Mətn": deleted_message_text(message) if message else "Cache-də yoxdur",
+               "Mətn": deleted_message_text(message) if message else (snapshot or {}).get("content", "Cache-də yoxdur"),
                "Qoşmalar": attachments or "Yoxdur"}
-    await emit_log(bot, db, guild, "message_delete", "Mesaj silindi", target=author,
+    target = author or ((snapshot or {}).get("author_name") or None)
+    await emit_log(bot, db, guild, "message_delete", "Mesaj silindi", target=target,
                    channel=channel, details=details)
 
 
@@ -838,9 +859,20 @@ async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent)
     channel = guild.get_channel(payload.channel_id)
     cached_by_id = {message.id: message for message in payload.cached_messages}
     message_rows = []
+    cached_count = 0
     for message_id in sorted(payload.message_ids):
         message = cached_by_id.get(message_id)
+        snapshot = deleted_message_cache.pop(message_id, None)
         if message is None:
+            if snapshot is not None and snapshot["guild_id"] == guild.id:
+                cached_count += 1
+                message_rows.append({
+                    "id": str(message_id),
+                    "müəllif": snapshot["author_name"],
+                    "mətn": snapshot["content"],
+                    "qoşmalar": snapshot["attachments"],
+                })
+                continue
             message_rows.append({
                 "id": str(message_id),
                 "müəllif": "Məlumat keşdə yoxdur",
@@ -848,13 +880,13 @@ async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent)
                 "qoşmalar": [],
             })
             continue
+        cached_count += 1
         message_rows.append({
             "id": str(message.id),
             "müəllif": str(message.author),
             "mətn": deleted_message_text(message),
             "qoşmalar": [f"{item.filename}: {item.url}" for item in message.attachments],
         })
-    cached_count = len(cached_by_id)
     details = {"Silinən mesaj sayı": str(len(payload.message_ids)),
                "Mesajlar": message_rows,
                "Qeyd": f"{cached_count} / {len(payload.message_ids)} mesajın tam məlumatı keşdə tapıldı. Digər mesajların ID-si göstərilir, məzmunu silinmədən əvvəl keşdə olmadığı üçün bərpa edilə bilmir."}
@@ -912,6 +944,12 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
             details["Timeout sonra"] = str(after_timeout or "Yoxdur")
         elif action == "member_role_update":
             event_key, title = "member_roles", "Üzv rolları dəyişdi"
+            before_roles = getattr(getattr(changes, "before", None), "roles", None) or []
+            after_roles = getattr(getattr(changes, "after", None), "roles", None) or []
+            removed_roles = [getattr(role, "name", f"ID {getattr(role, 'id', role)}") for role in before_roles]
+            added_roles = [getattr(role, "name", f"ID {getattr(role, 'id', role)}") for role in after_roles]
+            details["Əlavə edildi"] = added_roles or "—"
+            details["Silindi"] = removed_roles or "—"
         else:
             event_key = None  # Profile changes are logged once by on_member_update.
     elif action.startswith("role_"):
@@ -943,6 +981,7 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
 
 @bot.event
 async def on_message(message: discord.Message):
+    _cache_deleted_message(message)
     if message.author.bot:
         return
 
