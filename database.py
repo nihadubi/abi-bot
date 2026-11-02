@@ -1,5 +1,7 @@
 import sqlite3
 import json
+import os
+import urllib.request
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -10,7 +12,45 @@ class Database:
     """SQLite storage; member records are isolated by Discord guild."""
     def __init__(self, db_path="voice_stats.db"):
         self.db_path = db_path
+        self.upstash_url = os.getenv("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
+        self.upstash_token = os.getenv("UPSTASH_REDIS_REST_TOKEN", "").strip()
+        if bool(self.upstash_url) != bool(self.upstash_token):
+            raise RuntimeError("UPSTASH_REDIS_REST_URL və UPSTASH_REDIS_REST_TOKEN birlikdə təyin edilməlidir.")
         self._create_tables()
+        if self.upstash_url:
+            self._restore_remote_log_settings()
+
+    def _upstash_command(self, *args):
+        request = urllib.request.Request(
+            self.upstash_url,
+            data=json.dumps(args, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.upstash_token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if "error" in result:
+            raise RuntimeError(f"Upstash Redis xətası: {result['error']}")
+        return result.get("result")
+
+    def _restore_remote_log_settings(self):
+        entries = self._upstash_command("HGETALL", "abi_bot:log_settings") or []
+        with self._connect() as conn:
+            for field, raw_value in zip(entries[::2], entries[1::2]):
+                try:
+                    guild_id, event_key = field.split(":", 1)
+                    setting = json.loads(raw_value)
+                    channel_id = setting.get("channel_id")
+                    conn.execute(
+                        """INSERT INTO log_settings(guild_id,event_key,enabled,channel_id) VALUES(?,?,?,?)
+                        ON CONFLICT(guild_id,event_key) DO UPDATE SET enabled=excluded.enabled,channel_id=excluded.channel_id""",
+                        (int(guild_id), event_key, int(bool(setting.get("enabled"))), channel_id),
+                    )
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
 
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
@@ -72,6 +112,13 @@ class Database:
         return {row["event_key"]: {"enabled": bool(row["enabled"]), "channel_id": row["channel_id"]} for row in rows}
 
     def set_log_setting(self, guild_id, event_key, enabled, channel_id):
+        if self.upstash_url:
+            self._upstash_command(
+                "HSET",
+                "abi_bot:log_settings",
+                f"{int(guild_id)}:{event_key}",
+                json.dumps({"enabled": bool(enabled), "channel_id": channel_id}),
+            )
         with self._connect() as c:
             c.execute("""INSERT INTO log_settings(guild_id,event_key,enabled,channel_id) VALUES(?,?,?,?)
                 ON CONFLICT(guild_id,event_key) DO UPDATE SET enabled=excluded.enabled,channel_id=excluded.channel_id""",

@@ -17,6 +17,10 @@ pip install -r requirements.txt
 
 Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables image descriptions. The web server binds to `HOST=0.0.0.0` and `PORT=8080` by default so managed hosts such as Render can reach it; Render supplies `PORT` automatically. For a reverse proxy on the same host, set `HOST=127.0.0.1`; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
 
+On Render, SQLite data is lost on deploys unless the service has a persistent disk. Attach a disk mounted at `/var/data` and set `DATABASE_PATH=/var/data/abi_bot.db` in the service's environment. Without a persistent disk, log-channel selections, log history, and other database state reset when Render replaces the instance.
+
+For a Render Free service, log-channel selections can be kept in Upstash Redis instead: create a free Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from its HTTPS REST credentials in Render's environment. The bot restores these settings on startup and updates Redis whenever a log setting is saved. This keeps log-channel choices only; the SQLite log archive and other database data still need persistent storage.
+
 Never commit `.env` or the SQLite database. If a token or key has been exposed, rotate it.
 
 ## Run

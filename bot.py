@@ -49,7 +49,8 @@ intents.invites = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 # Baza faylını layihə qovluğunda saxlayırıq. SQLite backup açıq DB-dən də tutarlı
 # snapshot götürür; xam DB/WAL/SHM fayllarını os.replace ilə daşımaq olmaz.
-DB_FILE = str(BASE_DIR / "abi_bot.db")
+configured_db_path = os.getenv("DATABASE_PATH", "").strip()
+DB_FILE = configured_db_path or str(BASE_DIR / "abi_bot.db")
 OLD_DB_FILE = str(BASE_DIR / "voice_stats.db")
 if not os.path.exists(DB_FILE) and os.path.exists(OLD_DB_FILE):
     migration_file = DB_FILE + ".migrating"
@@ -64,6 +65,8 @@ if not os.path.exists(DB_FILE) and os.path.exists(OLD_DB_FILE):
                 os.remove(migration_file)
         except OSError:
             pass
+        if configured_db_path:
+            raise
         DB_FILE = OLD_DB_FILE
         logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
         logging.getLogger("abi_bot").warning(
