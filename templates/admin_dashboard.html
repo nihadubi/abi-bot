@@ -555,7 +555,6 @@
               <div>
                 <label class="block text-xs text-slate-400 mb-1">Cəza / tədbir növü</label>
                 <select id="modAction" onchange="updateModerationForm()" class="w-full p-3 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white">
-                  <option value="warn">Xəbərdarlıq (warn)</option>
                   <option value="timeout">Timeout (mute)</option>
                   <option value="untimeout">Timeout-u aç</option>
                   <option value="kick">Serverdən çıxar (kick)</option>
@@ -747,7 +746,6 @@
     };
 
     document.addEventListener("DOMContentLoaded", async () => {
-      document.querySelector('#modAction option[value="warn"]')?.remove();
       const commandsTabLabel = document.querySelector("#tabBtnBots span");
       if (commandsTabLabel) commandsTabLabel.textContent = "Komandalar";
       pageHeadings.bots = "Bot əmrləri";

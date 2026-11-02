@@ -649,24 +649,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             except discord.HTTPException:
                 return web.json_response({"success": False, "error": "Discord üzv məlumatını ala bilmədi."}, status=502)
 
-        if action == "warn":
-            db.upsert_user_identity(guild.id, member.id, member.name, member.display_name)
-            previous_total = db.get_warning_count(guild.id, member.id)
-            db.add_warning(guild.id, member.id, None, reason)
-            total = db.get_warning_count(guild.id, member.id)
-            if total != previous_total + 1:
-                return web.json_response({"success": False, "error": "Xəbərdarlıq bazaya yazılmadı."}, status=500)
-            note = f"Xəbərdarlıq qeyd edildi. Ümumi say: {total}."
-            if total in (3, 5) or total > 5:
-                if me.guild_permissions.moderate_members and member.id != guild.owner_id and me.top_role > member.top_role:
-                    timeout_hours = 1 if total == 3 else 24
-                    try:
-                        await member.timeout(discord.utils.utcnow() + timedelta(hours=timeout_hours), reason=f"Admin Panel: {total} xəbərdarlıq")
-                        note += f" Avtomatik {timeout_hours} saatlıq timeout tətbiq edildi."
-                    except discord.HTTPException:
-                        note += " Avtomatik timeout tətbiq edilə bilmədi."
-            return web.json_response({"success": True, "message": note})
-
         if action in {"timeout", "untimeout"}:
             if not me.guild_permissions.moderate_members:
                 return web.json_response({"success": False, "error": "Bota Moderate Members icazəsi verilməyib."}, status=403)

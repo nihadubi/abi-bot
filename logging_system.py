@@ -398,10 +398,30 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
         guild_icon_url = _guild_icon_url(guild)
         if event_key == "message_bulk_delete" and isinstance((details or {}).get("Mesajlar"), list):
             messages = [dict(message, _index=index) for index, message in enumerate(details["Mesajlar"], 1)]
-            page_size = 5
-            batches = [messages[offset:offset + page_size] for offset in range(0, len(messages), page_size)] or [[]]
+            # Pack up to ten short message fields per post, while keeping each
+            # embed comfortably below Discord's aggregate 6000-character limit.
+            batches = []
+            batch = []
+            batch_chars = 0
+            for message in messages:
+                text = str(message.get("mətn") or "(boş mətn)").strip()
+                attachments = message.get("qoşmalar") or []
+                if attachments:
+                    text += "\n\nQoşmalar:\n" + "\n".join(str(item) for item in attachments)
+                author = str(message.get("müəllif") or "Müəllif məlum deyil")
+                field_cost = min(900, len(text)) + min(256, len(author) + 8)
+                if batch and (len(batch) >= 10 or batch_chars + field_cost > 4500):
+                    batches.append(batch)
+                    batch = []
+                    batch_chars = 0
+                batch.append(message)
+                batch_chars += field_cost
+            if batch:
+                batches.append(batch)
+            if not batches:
+                batches = [[]]
             for page_number, batch in enumerate(batches, 1):
-                start = (page_number - 1) * page_size + 1
+                start = batch[0]["_index"] if batch else 0
                 end = start + len(batch) - 1
                 page_details = dict(details)
                 page_details["Mesajlar"] = batch

@@ -487,6 +487,8 @@ STATUS_TRACKS = [
 STATUS_ROTATION_SECONDS = 10 * 60
 status_track_index = 0
 status_rotation_task = None
+slash_commands_synced = False
+slash_sync_lock = asyncio.Lock()
 
 
 async def rotate_bot_status():
@@ -508,7 +510,7 @@ async def rotate_bot_status():
 
 @bot.event
 async def on_ready():
-    global status_rotation_task
+    global status_rotation_task, status_track_index, slash_commands_synced
     # Opus audio kitabxanasını aktivləşdiririk
     if not discord.opus.is_loaded():
         try:
@@ -530,11 +532,14 @@ async def on_ready():
             status=discord.Status.online,
         )
 
-    try:
-        synced = await bot.tree.sync()
-        logger.info(f"{len(synced)} Slash komandası Discord ilə qlobal sinxronlaşdırıldı.")
-    except Exception as e:
-        logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
+    async with slash_sync_lock:
+        if not slash_commands_synced:
+            try:
+                synced = await bot.tree.sync()
+                slash_commands_synced = True
+                logger.info(f"{len(synced)} Slash komandası Discord ilə qlobal sinxronlaşdırıldı.")
+            except Exception as e:
+                logger.error(f"Slash komandaları sinxronlaşdırılmadı: {e}")
 
     print(f"{bot.user} olaraq daxil olundu.")
 
