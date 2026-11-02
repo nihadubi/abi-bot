@@ -1,6 +1,6 @@
 ﻿# Abi Discord Bot
 
-Discord bot for moderation, anti-spam, voice event logging, AI replies, and an authenticated web admin panel with post scheduling and server controls.
+Discord bot for moderation, voice event logging, and an authenticated web admin panel with post scheduling and server controls.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables AI features. Set `GUILD_ID` if you want slash commands synced quickly to a specific server. The web server binds to `HOST=127.0.0.1` and `PORT=8080` by default. For a reverse proxy on the same host, keep the bot bound to localhost; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
+Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables image descriptions. The web server binds to `HOST=127.0.0.1` and `PORT=8080` by default. For a reverse proxy on the same host, keep the bot bound to localhost; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
 
 Never commit `.env` or the SQLite database. If a token or key has been exposed, rotate it.
 
