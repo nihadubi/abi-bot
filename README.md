@@ -19,7 +19,7 @@ Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_P
 
 On Render, SQLite data is lost on deploys unless the service has a persistent disk. Attach a disk mounted at `/var/data` and set `DATABASE_PATH=/var/data/abi_bot.db` in the service's environment. Without a persistent disk, log-channel selections, log history, and other database state reset when Render replaces the instance.
 
-For a Render Free service, log-channel selections can be kept in Upstash Redis instead: create a free Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from its HTTPS REST credentials in Render's environment. The bot restores these settings on startup and updates Redis whenever a log setting is saved. This keeps log-channel choices only; the SQLite log archive and other database data still need persistent storage.
+For a Render Free service, server settings can be kept in Upstash Redis instead: create a free Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` from its HTTPS REST credentials in Render's environment. The bot restores log channels, auto-role, welcome-message settings, and log appearance templates on startup. The SQLite log archive, moderation records, and other database data still need persistent storage.
 
 Never commit `.env` or the SQLite database. If a token or key has been exposed, rotate it.
 

@@ -245,13 +245,26 @@ def _stringify_change_value(value):
 
 
 def make_embed(event_key, title, actor=None, target=None, channel=None, details=None,
-               created_at=None, bot_avatar_url=None, guild_icon_url=None):
+               created_at=None, bot_avatar_url=None, guild_icon_url=None, presentation=None):
     info = LOG_EVENT_MAP.get(event_key, {"label": event_key, "group": "Sistem"})
+    presentation = presentation or {}
+    title_text = str(presentation.get("title") or title)[:256]
+    title_text = title_text.replace("{title}", str(title)).replace("{event}", str(info["label"]))
+    header_text = str(presentation.get("header") or info["group"]).replace("{group}", info["group"])[:256]
+    footer_template = str(presentation.get("footer") or "").strip()
+    body_template = str(presentation.get("body") or "").strip()
     style = GROUP_STYLE.get(info["group"], {"color": NEUTRAL, "emoji": "✦"})
     if event_key in {"moderation_ban", "moderation_unban"}:
         member_group = LOG_EVENT_MAP["member_join"]["group"]
         style = GROUP_STYLE[member_group]
+    custom_color = str(presentation.get("color") or "").strip().lstrip("#")
+    if len(custom_color) == 6:
+        try:
+            style = {**style, "color": int(custom_color, 16)}
+        except ValueError:
+            pass
     details = dict(details or {})
+    custom_detail_source = dict(details)
 
     actor_mention, actor_name = _mention(actor)
     target_mention, target_name = _mention(target)
@@ -309,19 +322,25 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
     for key, raw in details.items():
         if str(key).strip().casefold() in {"dəyişiklik", "dəyişikliklər"}:
             continue
+        if body_template and not (event_key == "message_bulk_delete" and key == "Mesajlar"):
+            continue
         if event_key == "message_bulk_delete" and key == "Mesajlar" and isinstance(raw, (list, tuple)):
             for position, message in enumerate(raw, 1):
                 if not isinstance(message, dict):
                     continue
                 index = message.get("_index", position)
                 author = str(message.get("müəllif") or "Müəllif məlum deyil")
+                message_id = str(message.get("id") or "")
                 content = str(message.get("mətn") or "(boş mətn)").strip()
                 attachments = message.get("qoşmalar") or []
                 if attachments:
                     content += "\n\nQoşmalar:\n" + "\n".join(str(item) for item in attachments)
                 if len(content) > 900:
                     content = content[:897].rstrip() + "..."
-                long_fields.append((f"{int(index):02d} · {author}"[:256], content or "(boş mətn)"))
+                message_label = f"{int(index):02d} · {author}"
+                if message_id:
+                    message_label += f" · ID {message_id}"
+                long_fields.append((message_label[:256], content or "(boş mətn)"))
             continue
         value = _fmt_value(raw)
         if value.strip().lower() in _EMPTY_VALUES:
@@ -332,13 +351,29 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
         else:
             long_fields.append((label, value))
 
-    body = [f"{style['emoji']} **{title}**", RULE]
-    body.extend(rows)
+    body = [f"{style['emoji']} **{title_text}**", RULE]
+    if body_template:
+        detail_text = "\n".join(
+            f"{key}: {_fmt_value(value)}" for key, value in custom_detail_source.items()
+            if key != "Mesajlar" and str(key).strip().casefold() not in {"dəyişiklik", "dəyişikliklər"}
+        )[:1800]
+        replacements = {
+            "{group}": str(info["group"]), "{event}": str(info["label"]),
+            "{title}": str(title), "{actor}": str(actor_mention or actor_name or "—"),
+            "{target}": str(target_mention or target_name or "—"),
+            "{channel}": str(getattr(channel, "mention", None) or getattr(channel, "name", None) or "—"),
+            "{details}": detail_text,
+        }
+        for placeholder, value in replacements.items():
+            body_template = body_template.replace(placeholder, value)
+        body.append(body_template[:3500])
+    else:
+        body.extend(rows)
     embed = discord.Embed(description="\n".join(body)[:4000], color=style["color"],
                           timestamp=created_at or datetime.now(timezone.utc))
     # Böyük başlıq onsuz da hadisəni tam yazır (məs. "Rol silindi"); yuxarıdakı
     # kiçik yazını eyni mətnin təkrarı etmək əvəzinə qrup adını göstəririk.
-    embed.set_author(name=info["group"], icon_url=guild_icon_url or DEFAULT_AVATAR)
+    embed.set_author(name=header_text, icon_url=guild_icon_url or DEFAULT_AVATAR)
 
     thumb = _avatar_url(target) or _avatar_url(actor)
     if thumb:
@@ -361,8 +396,8 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
         embed.add_field(name=label, value=shown, inline=False)
         remaining -= len(label) + len(shown)
 
-    footer = info["group"].lower()
-    if target_id:
+    footer = footer_template.replace("{group}", info["group"]).replace("{id}", str(target_id or "")) if footer_template else info["group"].lower()
+    if target_id and not footer_template:
         footer = f"{footer}  ·  id {target_id}"
     embed.set_footer(text=footer, icon_url=bot_avatar_url or DEFAULT_AVATAR)
     return embed
@@ -395,6 +430,13 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
     if not isinstance(destination, discord.TextChannel):
         return event_id
     try:
+        presentation = {}
+        get_setting = getattr(db, "get_guild_setting", None)
+        if get_setting:
+            try:
+                presentation = json.loads(get_setting(guild.id, f"log_template:{event_key}", "{}"))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                presentation = {}
         bot_user = getattr(bot, "user", None)
         bot_avatar_url = _avatar_url(bot_user)
         guild_icon_url = _guild_icon_url(guild)
@@ -429,11 +471,13 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
                 page_details["Mesajlar"] = batch
                 page_title = title if len(batches) == 1 else f"{title} · {start}–{end}/{len(messages)}"
                 embed = make_embed(event_key, page_title, actor, target, channel, page_details, created_at,
-                                   bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
+                                   bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url,
+                                   presentation=presentation)
                 await destination.send(embed=embed)
         else:
             embed = make_embed(event_key, title, actor, target, channel, details, created_at,
-                               bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
+                               bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url,
+                               presentation=presentation)
             await destination.send(embed=embed)
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("Log kanala göndərilmədi | guild=%s event=%s channel=%s: %s",

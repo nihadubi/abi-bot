@@ -19,6 +19,7 @@ class Database:
         self._create_tables()
         if self.upstash_url:
             self._restore_remote_log_settings()
+            self._restore_remote_guild_settings()
 
     def _upstash_command(self, *args):
         request = urllib.request.Request(
@@ -50,6 +51,20 @@ class Database:
                         (int(guild_id), event_key, int(bool(setting.get("enabled"))), channel_id),
                     )
                 except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+
+    def _restore_remote_guild_settings(self):
+        entries = self._upstash_command("HGETALL", "abi_bot:guild_settings") or []
+        with self._connect() as conn:
+            for field, value in zip(entries[::2], entries[1::2]):
+                try:
+                    guild_id, key = field.split(":", 1)
+                    conn.execute(
+                        "INSERT INTO guild_settings(guild_id,key,value) VALUES(?,?,?) "
+                        "ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value",
+                        (int(guild_id), key, value),
+                    )
+                except (TypeError, ValueError):
                     continue
 
     def _connect(self):
@@ -102,9 +117,27 @@ class Database:
                 if column in user_columns:
                     c.execute(f"ALTER TABLE users DROP COLUMN {column}")
             c.execute("DROP TABLE IF EXISTS temp_channels")
-            # Forget only the retired welcome/auto-role settings; preserve every other guild setting.
-            c.execute("DELETE FROM guild_settings WHERE key IN ('autorole','member_role','new_member_role','welcome_channel')")
             c.execute("INSERT OR REPLACE INTO schema_meta VALUES('version',?)", (str(SCHEMA_VERSION),))
+
+    def get_guild_setting(self, guild_id, key, default=None):
+        with self._connect() as c:
+            row = c.execute("SELECT value FROM guild_settings WHERE guild_id=? AND key=?", (guild_id, key)).fetchone()
+        return row["value"] if row else default
+
+    def set_guild_setting(self, guild_id, key, value):
+        self.set_guild_settings(guild_id, {key: value})
+
+    def set_guild_settings(self, guild_id, values):
+        values = {str(key): str(value) for key, value in values.items()}
+        if not values:
+            return
+        if self.upstash_url:
+            fields = [item for key, value in values.items() for item in (f"{int(guild_id)}:{key}", value)]
+            self._upstash_command("HSET", "abi_bot:guild_settings", *fields)
+        with self._connect() as c:
+            c.executemany("""INSERT INTO guild_settings(guild_id,key,value) VALUES(?,?,?)
+                ON CONFLICT(guild_id,key) DO UPDATE SET value=excluded.value""",
+                [(guild_id, key, value) for key, value in values.items()])
 
     def get_log_settings(self, guild_id):
         with self._connect() as c:

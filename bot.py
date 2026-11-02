@@ -46,7 +46,7 @@ intents.voice_states = True
 intents.moderation = True
 intents.invites = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None, max_messages=10000)
 # Baza faylını layihə qovluğunda saxlayırıq. SQLite backup açıq DB-dən də tutarlı
 # snapshot götürür; xam DB/WAL/SHM fayllarını os.replace ilə daşımaq olmaz.
 configured_db_path = os.getenv("DATABASE_PATH", "").strip()
@@ -493,6 +493,62 @@ status_track_index = 0
 status_rotation_task = None
 slash_commands_synced = False
 slash_sync_lock = asyncio.Lock()
+persistent_welcome_view_registered = False
+
+
+class WelcomeRoleSwapView(discord.ui.View):
+    def __init__(self, label="Rolu dəyiş"):
+        super().__init__(timeout=None)
+        button = discord.ui.Button(
+            label=str(label or "Rolu dəyiş")[:80],
+            style=discord.ButtonStyle.primary,
+            custom_id="abi_bot:welcome_role_swap",
+        )
+        button.callback = self.swap_roles
+        self.add_item(button)
+
+    async def swap_roles(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        member = interaction.user
+        if guild is None or not isinstance(member, discord.Member):
+            await interaction.response.send_message("Bu düymə yalnız serverdə istifadə oluna bilər.", ephemeral=True)
+            return
+        allowed_role_value = db.get_guild_setting(guild.id, "welcome_button_allowed_role", "")
+        allowed_role = guild.get_role(int(allowed_role_value)) if str(allowed_role_value).isdigit() else None
+        if not member.guild_permissions.administrator and (not allowed_role or allowed_role not in member.roles):
+            await interaction.response.send_message("Bu düymədən istifadə etmək üçün icazəniz yoxdur.", ephemeral=True)
+            return
+        remove_value = db.get_guild_setting(guild.id, "welcome_button_remove_role", "")
+        add_value = db.get_guild_setting(guild.id, "welcome_button_add_role", "")
+        if not str(remove_value).isdigit() or not str(add_value).isdigit():
+            await interaction.response.send_message("Rol düyməsi hazırda konfiqurasiya edilməyib.", ephemeral=True)
+            return
+        remove_role = guild.get_role(int(remove_value))
+        add_role = guild.get_role(int(add_value))
+        bot_member = guild.me
+        if (not remove_role or not add_role or not bot_member
+                or not bot_member.guild_permissions.manage_roles
+                or remove_role == guild.default_role or add_role == guild.default_role
+                or remove_role.managed or add_role.managed
+                or remove_role >= bot_member.top_role or add_role >= bot_member.top_role):
+            await interaction.response.send_message("Rol ayarları artıq uyğun deyil. Admin paneldən yenidən yoxlayın.", ephemeral=True)
+            return
+        if remove_role not in member.roles:
+            await interaction.response.send_message(f"Bu düymə üçün əvvəlcə {remove_role.mention} rolunuz olmalıdır.", ephemeral=True)
+            return
+        if member.top_role >= bot_member.top_role:
+            await interaction.response.send_message("Bot bu üzvün rollarını dəyişə bilmir.", ephemeral=True)
+            return
+        updated_roles = [role for role in member.roles if role != remove_role and role != guild.default_role]
+        if add_role not in updated_roles:
+            updated_roles.append(add_role)
+        try:
+            await member.edit(roles=updated_roles, reason="Qarşılama mesajındakı rol dəyişmə düyməsi")
+        except (discord.Forbidden, discord.HTTPException):
+            logger.exception("Düymə ilə rol dəyişdirilə bilmədi | guild=%s member=%s", guild.id, member.id)
+            await interaction.response.send_message("Rol dəyişdirilə bilmədi. Botun Manage Roles icazəsini yoxlayın.", ephemeral=True)
+            return
+        await interaction.response.send_message(f"{remove_role.name} rolu götürüldü, {add_role.name} rolu verildi.", ephemeral=True)
 
 
 async def rotate_bot_status():
@@ -514,7 +570,7 @@ async def rotate_bot_status():
 
 @bot.event
 async def on_ready():
-    global status_rotation_task, status_track_index, slash_commands_synced
+    global status_rotation_task, status_track_index, slash_commands_synced, persistent_welcome_view_registered
     # Opus audio kitabxanasını aktivləşdiririk
     if not discord.opus.is_loaded():
         try:
@@ -522,6 +578,10 @@ async def on_ready():
             logger.info("Opus audio kitabxanası uğurla yükləndi.")
         except Exception as oe:
             logger.warning(f"Opus yüklənmədi: {oe}")
+
+    if not persistent_welcome_view_registered:
+        bot.add_view(WelcomeRoleSwapView())
+        persistent_welcome_view_registered = True
 
     for guild in bot.guilds:
         await initialize_invite_cache(guild)
@@ -550,6 +610,48 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
+    auto_role_value = db.get_guild_setting(member.guild.id, "autorole", "")
+    if str(auto_role_value).isdigit():
+        auto_role = member.guild.get_role(int(auto_role_value))
+        bot_member = member.guild.me
+        if auto_role and bot_member and bot_member.guild_permissions.manage_roles and auto_role < bot_member.top_role:
+            try:
+                await member.add_roles(auto_role, reason="Admin Panel avtomatik üzv rolu")
+            except (discord.Forbidden, discord.HTTPException):
+                logger.exception("Avtomatik rol verilə bilmədi | guild=%s role=%s member=%s",
+                                 member.guild.id, auto_role.id, member.id)
+
+    welcome_channel_value = db.get_guild_setting(member.guild.id, "welcome_channel", "")
+    welcome_message = db.get_guild_setting(member.guild.id, "welcome_message", "").strip()
+    remove_role_value = db.get_guild_setting(member.guild.id, "welcome_button_remove_role", "")
+    add_role_value = db.get_guild_setting(member.guild.id, "welcome_button_add_role", "")
+    role_swap_view = None
+    if str(remove_role_value).isdigit() and str(add_role_value).isdigit():
+        button_label = db.get_guild_setting(member.guild.id, "welcome_button_label", "Rolu dəyiş")
+        role_swap_view = WelcomeRoleSwapView(button_label)
+    if str(welcome_channel_value).isdigit() and (welcome_message or role_swap_view):
+        welcome_channel = member.guild.get_channel(int(welcome_channel_value))
+        if isinstance(welcome_channel, discord.TextChannel):
+            replacements = {
+                "{mention}": member.mention,
+                "{user}": str(member),
+                "{username}": member.display_name,
+                "{server}": member.guild.name,
+                "{member_count}": str(member.guild.member_count or 0),
+                "{id}": str(member.id),
+            }
+            for placeholder, value in replacements.items():
+                welcome_message = welcome_message.replace(placeholder, value)
+            try:
+                await welcome_channel.send(
+                    welcome_message[:2000] or None,
+                    view=role_swap_view,
+                    allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
+                )
+            except (discord.Forbidden, discord.HTTPException):
+                logger.exception("Qarşılama mesajı göndərilə bilmədi | guild=%s channel=%s member=%s",
+                                 member.guild.id, welcome_channel.id, member.id)
+
     invite_info = await identify_join_invite(member.guild)
     inviter = None
     if invite_info.get("inviter_id"):
@@ -724,13 +826,28 @@ async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent)
     if guild is None:
         return
     channel = guild.get_channel(payload.channel_id)
-    cached = sorted(payload.cached_messages, key=lambda message: message.id)
+    cached_by_id = {message.id: message for message in payload.cached_messages}
+    message_rows = []
+    for message_id in sorted(payload.message_ids):
+        message = cached_by_id.get(message_id)
+        if message is None:
+            message_rows.append({
+                "id": str(message_id),
+                "müəllif": "Məlumat keşdə yoxdur",
+                "mətn": "Məzmun silinmədən əvvəl botun keşində olmayıb.",
+                "qoşmalar": [],
+            })
+            continue
+        message_rows.append({
+            "id": str(message.id),
+            "müəllif": str(message.author),
+            "mətn": deleted_message_text(message),
+            "qoşmalar": [f"{item.filename}: {item.url}" for item in message.attachments],
+        })
+    cached_count = len(cached_by_id)
     details = {"Silinən mesaj sayı": str(len(payload.message_ids)),
-               "Mesajlar": [{"id": str(message.id), "müəllif": str(message.author),
-                             "mətn": deleted_message_text(message),
-                             "qoşmalar": [f"{item.filename}: {item.url}" for item in message.attachments]}
-                            for message in cached],
-               "Qeyd": f"Keşdən {len(cached)} / {len(payload.message_ids)} mesajın detalları oxundu; keşdə olmayan məzmun əlçatan deyil."}
+               "Mesajlar": message_rows,
+               "Qeyd": f"{cached_count} / {len(payload.message_ids)} mesajın tam məlumatı keşdə tapıldı. Digər mesajların ID-si göstərilir, məzmunu silinmədən əvvəl keşdə olmadığı üçün bərpa edilə bilmir."}
     await emit_log(bot, db, guild, "message_bulk_delete", "Mesajlar toplu silindi",
                    channel=channel, details=details)
 

@@ -770,6 +770,134 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
         return web.json_response({"success": True, "message": "Log sazlamaları yadda saxlanıldı."})
 
     @require_auth
+    async def handle_api_server_settings(request: web.Request):
+        guild_id = request.query.get("guild_id", "")
+        guild = bot.get_guild(int(guild_id)) if guild_id.isdigit() else None
+        if not guild:
+            return web.json_response({"success": False, "error": "Server tapılmadı."}, status=404)
+        channels = [{"id": str(channel.id), "name": channel.name}
+                    for channel in guild.text_channels
+                    if guild.me and (perms := channel.permissions_for(guild.me)).view_channel and perms.send_messages]
+        roles = [{"id": str(role.id), "name": role.name, "editable": _manageable_role(guild, role)}
+                 for role in sorted(guild.roles, key=lambda item: item.position, reverse=True)
+                 if role != guild.default_role]
+        templates = {}
+        for event in LOG_EVENTS:
+            raw = db.get_guild_setting(guild.id, f"log_template:{event['key']}", "{}")
+            try:
+                templates[event["key"]] = json.loads(raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                templates[event["key"]] = {}
+        return web.json_response({
+            "success": True,
+            "channels": channels,
+            "roles": roles,
+            "events": LOG_EVENTS,
+            "autorole_id": db.get_guild_setting(guild.id, "autorole", ""),
+            "welcome_channel_id": db.get_guild_setting(guild.id, "welcome_channel", ""),
+            "welcome_message": db.get_guild_setting(guild.id, "welcome_message", ""),
+            "welcome_button_remove_role": db.get_guild_setting(guild.id, "welcome_button_remove_role", ""),
+            "welcome_button_add_role": db.get_guild_setting(guild.id, "welcome_button_add_role", ""),
+            "welcome_button_label": db.get_guild_setting(guild.id, "welcome_button_label", "Rolu dəyiş"),
+            "welcome_button_allowed_role": db.get_guild_setting(guild.id, "welcome_button_allowed_role", ""),
+            "templates": templates,
+        })
+
+    @require_auth
+    async def handle_api_save_server_settings(request: web.Request):
+        try:
+            data = await request.json()
+            guild_id = int(data.get("guild_id", 0))
+        except (TypeError, ValueError):
+            return web.json_response({"success": False, "error": "Sorğu məlumatları düzgün deyil."}, status=400)
+        if not verify_csrf(request, str(data.get("csrf_token", ""))):
+            return web.json_response({"success": False, "error": "CSRF yoxlaması uğursuz oldu."}, status=403)
+        guild = bot.get_guild(guild_id) if guild_id > 0 else None
+        if not guild or not guild.me:
+            return web.json_response({"success": False, "error": "Server və ya botun üzvlük məlumatı tapılmadı."}, status=404)
+
+        role_id = str(data.get("autorole_id", "") or "").strip()
+        role = None
+        if role_id:
+            if not role_id.isdigit():
+                return web.json_response({"success": False, "error": "Avtomatik rol seçimi düzgün deyil."}, status=400)
+            role = guild.get_role(int(role_id))
+            if not _manageable_role(guild, role):
+                return web.json_response({"success": False, "error": "Bu rol bot tərəfindən verilə bilməz. Botun rolunu yuxarı qaldırın."}, status=400)
+
+        remove_role_id = str(data.get("welcome_button_remove_role", "") or "").strip()
+        add_role_id = str(data.get("welcome_button_add_role", "") or "").strip()
+        if bool(remove_role_id) != bool(add_role_id):
+            return web.json_response({"success": False, "error": "Düyməni aktivləşdirmək üçün götürüləcək və veriləcək rolu birlikdə seçin."}, status=400)
+        if remove_role_id and (not remove_role_id.isdigit() or not add_role_id.isdigit()):
+            return web.json_response({"success": False, "error": "Düymə üçün rol seçimi düzgün deyil."}, status=400)
+        if remove_role_id:
+            remove_role = guild.get_role(int(remove_role_id))
+            add_role = guild.get_role(int(add_role_id))
+            if remove_role and add_role and remove_role.id == add_role.id:
+                return web.json_response({"success": False, "error": "Götürüləcək və veriləcək rol fərqli olmalıdır."}, status=400)
+            if not _manageable_role(guild, remove_role) or not _manageable_role(guild, add_role):
+                return web.json_response({"success": False, "error": "Düymə üçün hər iki rol bot tərəfindən idarə edilə bilməlidir."}, status=400)
+        button_label = str(data.get("welcome_button_label", "Rolu dəyiş")).strip()
+        if remove_role_id and not button_label:
+            return web.json_response({"success": False, "error": "Düymə yazısı boş qala bilməz."}, status=400)
+        if len(button_label) > 80:
+            return web.json_response({"success": False, "error": "Düymə yazısı maksimum 80 simvol ola bilər."}, status=400)
+        allowed_role_id = str(data.get("welcome_button_allowed_role", "") or "").strip()
+        if allowed_role_id:
+            if not allowed_role_id.isdigit():
+                return web.json_response({"success": False, "error": "Düymədən istifadə icazəsi olan rol düzgün deyil."}, status=400)
+            allowed_role = guild.get_role(int(allowed_role_id))
+            if not allowed_role or allowed_role == guild.default_role:
+                return web.json_response({"success": False, "error": "Düymə üçün istifadəçi icazə rolu seçin."}, status=400)
+
+        channel_id = str(data.get("welcome_channel_id", "") or "").strip()
+        welcome_channel = None
+        if channel_id:
+            if not channel_id.isdigit():
+                return web.json_response({"success": False, "error": "Qarşılama kanalı düzgün deyil."}, status=400)
+            welcome_channel = guild.get_channel(int(channel_id))
+            if not isinstance(welcome_channel, discord.TextChannel):
+                return web.json_response({"success": False, "error": "Qarşılama üçün mətn kanalı seçin."}, status=400)
+            permissions = welcome_channel.permissions_for(guild.me)
+            if not (permissions.view_channel and permissions.send_messages):
+                return web.json_response({"success": False, "error": "Botun seçilən kanalda mesaj göndərmə icazəsi yoxdur."}, status=403)
+        if remove_role_id and not channel_id:
+            return web.json_response({"success": False, "error": "Rol düyməsini qarşılama kanalında göstərmək üçün kanal seçin."}, status=400)
+
+        welcome_message = str(data.get("welcome_message", ""))
+        if len(welcome_message) > 1800:
+            return web.json_response({"success": False, "error": "Qarşılama mətni 1800 simvoldan uzun ola bilməz."}, status=400)
+
+        event_key = str(data.get("event_key", ""))
+        template = data.get("template", {})
+        if event_key not in LOG_EVENT_MAP or not isinstance(template, dict):
+            return web.json_response({"success": False, "error": "Log şablonu seçimi düzgün deyil."}, status=400)
+        template = {key: str(template.get(key, "")).strip() for key in ("header", "title", "body", "footer", "color")}
+        if len(template["header"]) > 256 or len(template["title"]) > 256 or len(template["footer"]) > 2048:
+            return web.json_response({"success": False, "error": "Header, başlıq və ya footer uzunluğu limiti keçib."}, status=400)
+        if len(template["body"]) > 2000:
+            return web.json_response({"success": False, "error": "Log mətni 2000 simvoldan uzun ola bilməz."}, status=400)
+        if template["color"] and not re.fullmatch(r"#?[0-9a-fA-F]{6}", template["color"]):
+            return web.json_response({"success": False, "error": "Rəng #RRGGBB formatında olmalıdır."}, status=400)
+
+        try:
+            db.set_guild_settings(guild.id, {
+                "autorole": role_id,
+                "welcome_channel": channel_id,
+                "welcome_message": welcome_message,
+                "welcome_button_remove_role": remove_role_id,
+                "welcome_button_add_role": add_role_id,
+                "welcome_button_label": button_label or "Rolu dəyiş",
+                "welcome_button_allowed_role": allowed_role_id,
+                f"log_template:{event_key}": json.dumps(template, ensure_ascii=False),
+            })
+        except Exception:
+            logger.exception("Server sazlamaları yadda saxlanmadı | guild=%s", guild.id)
+            return web.json_response({"success": False, "error": "Sazlamalar yadda saxlanmadı. Redis bağlantısını yoxlayın."}, status=503)
+        return web.json_response({"success": True, "message": "Server sazlamaları saxlanıldı."})
+
+    @require_auth
     async def handle_api_log_events(request: web.Request):
         guild_id = request.query.get("guild_id", "")
         if not guild_id.isdigit() or not bot.get_guild(int(guild_id)):
@@ -1352,6 +1480,8 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     app.router.add_get("/admin/api/channels", handle_api_channels)
     app.router.add_get("/admin/api/logs/settings", handle_api_log_settings)
     app.router.add_post("/admin/api/logs/settings", handle_api_save_log_settings)
+    app.router.add_get("/admin/api/server-settings", handle_api_server_settings)
+    app.router.add_post("/admin/api/server-settings", handle_api_save_server_settings)
     app.router.add_get("/admin/api/logs/events", handle_api_log_events)
     app.router.add_get("/admin/api/logs/analytics", handle_api_log_analytics)
     app.router.add_get("/admin/api/structure", handle_api_structure)
