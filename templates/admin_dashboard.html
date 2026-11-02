@@ -3,21 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Abi Bot — Pro Admin Suite</title>
+  <title>abi — Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['"Space Grotesk"', 'ui-sans-serif', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+          },
           colors: {
-            brand: '#5865F2',
-            brandHover: '#4752C4',
-            brandGlow: 'rgba(88, 101, 242, 0.35)',
-            darkBg: '#090a0f',
-            cardBg: '#11141c',
-            cardHeader: '#171b26',
-            borderDark: '#222838',
+            brand: '#8B6CFF',
+            brandHover: '#7A56FF',
+            brandGlow: 'rgba(139, 108, 255, 0.30)',
+            darkBg: '#09090c',
+            cardBg: '#111218',
+            cardHeader: '#15161d',
+            borderDark: '#23242e',
             discordDark: '#2b2d31',
             discordEmbed: '#1e1f22',
             discordBtn: '#4e5058'
@@ -27,649 +35,722 @@
     }
   </script>
   <style>
-    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#090a0f; color:#e2e8f0; }
+    :root { color-scheme: dark; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; background:#09090c; color:#e7e8ee; }
     *, *::before, *::after { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; background:#090a0f; color:#e2e8f0; }
+    body { margin:0; min-height:100vh; background:#09090c; color:#e7e8ee; }
     button, input, select, textarea { font:inherit; } button { cursor:pointer; } a { color:inherit; text-decoration:none; }
     img, svg { vertical-align:middle; } img { max-width:100%; }
-    
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 7px; height: 7px; }
-    ::-webkit-scrollbar-track { background: #0b0d13; }
-    ::-webkit-scrollbar-thumb { background: #262c3e; border-radius: 999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3c445e; }
+    ::-webkit-scrollbar-track { background: #0b0b10; }
+    ::-webkit-scrollbar-thumb { background: #262835; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #363a4a; }
 
-    /* Glass & Glow */
-    .glass-card { background: rgba(17, 20, 28, 0.85); backdrop-filter: blur(12px); border: 1px solid #222838; }
-    .glass-panel { background: rgba(23, 27, 38, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); }
-    .glow-brand { box-shadow: 0 0 25px rgba(88, 101, 242, 0.22); }
+    /* Slightly tighter corner radii than stock Tailwind, for a console rather than a bubbly SaaS feel */
+    .rounded-2xl { border-radius: 13px !important; }
+    .rounded-xl { border-radius: 10px !important; }
+    .rounded-lg { border-radius: 8px !important; }
+
+    .glass-card { background: rgba(17, 18, 24, 0.88); backdrop-filter: blur(12px); border: 1px solid #23242e; }
+    .glass-panel { background: rgba(21, 22, 29, 0.65); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.06); }
+    .glow-brand { box-shadow: 0 0 25px rgba(139, 108, 255, 0.20); }
     .glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
-    
-    .tab-active { color: #818cf8 !important; border-bottom: 2px solid #5865f2 !important; background: rgba(88, 101, 242, 0.08); border-radius: 8px 8px 0 0; }
-    .tab-inactive { color: #94a3b8; border-bottom: 2px solid transparent; }
-    .tab-inactive:hover { color: #f1f5f9; background: rgba(255, 255, 255, 0.03); border-radius: 8px 8px 0 0; }
 
-    input, select, textarea { color:#f8fafc; background:#0c0e14; border:1px solid #222838; border-radius:0.75rem; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: #5865f2; box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.25); }
-    table { border-collapse: collapse; } th, td { border-bottom: 1px solid #1e2433; }
+    /* Rail nav item states (JS swaps these two class strings wholesale) */
+    .tab-active {
+      color:#ece8ff !important; background: linear-gradient(90deg, rgba(139,108,255,.16), rgba(139,108,255,.02)) !important;
+      border-left: 2px solid #8B6CFF !important; border-bottom: 2px solid transparent !important;
+    }
+    .tab-inactive { color: #878c9c; border-left: 2px solid transparent; border-bottom: 2px solid transparent; }
+    .tab-inactive:hover { color: #eef0f5; background: rgba(255, 255, 255, 0.03); }
+
+    input, select, textarea { color:#f3f4f8; background:#0c0d12; border:1px solid #23242e; border-radius:0.6rem; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #8B6CFF; box-shadow: 0 0 0 3px rgba(139, 108, 255, 0.22); }
+    table { border-collapse: collapse; } th, td { border-bottom: 1px solid #1c1d26; }
+
+    .font-display { font-family: 'Space Grotesk', ui-sans-serif, sans-serif; letter-spacing: -0.01em; }
+    .font-data { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+    .eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: .04em; color: #6c7183; }
+
+    /* Rail layout */
+    .rail { width: 236px; flex-shrink: 0; }
+    @media (max-width: 1024px) { .rail { display:none; } }
+    .rail-mobile-bar { display:none; }
+    @media (max-width: 1024px) { .rail-mobile-bar { display:flex; } }
   </style>
 </head>
-<body class="bg-darkBg text-slate-200 min-h-screen flex flex-col antialiased selection:bg-brand selection:text-white">
+<body class="bg-darkBg text-slate-200 min-h-screen antialiased selection:bg-brand selection:text-white">
 
-  <!-- Top Navigation Header -->
-  <header class="glass-card sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-borderDark">
-    <div class="flex items-center gap-3.5">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand to-indigo-500 flex items-center justify-center shadow-lg shadow-brand/30">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-        </svg>
-      </div>
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="text-base sm:text-lg font-bold text-white tracking-wide">Abi Bot</h1>
-          <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-brand/20 text-indigo-400 border border-brand/30">PRO ADMIN 2.0</span>
-        </div>
-        <p class="text-xs text-slate-400">Canlı Statistika, Moderasiya, Rol və Discord Paylaşım İdarəetməsi</p>
-      </div>
-    </div>
+  <div class="flex min-h-screen">
 
-    <div class="flex items-center gap-3">
-      <!-- Live Gateway Status Badge -->
-      <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 glow-emerald">
-        <span class="relative flex h-2 w-2">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-        </span>
-        <span id="gatewayStatusText">Bot Aktivdir</span>
-        <span id="pingBadge" class="text-slate-400 font-mono text-[11px] ml-1">...ms</span>
-      </div>
-
-      <button onclick="refreshCurrentTab()" title="Məlumatları yenilə" class="p-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300 hover:text-white transition">
-        <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-        </svg>
-      </button>
-
-      <a href="/admin/logout" class="flex items-center gap-1.5 text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-600 px-3.5 py-2 rounded-lg border border-rose-500/20 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-        </svg>
-        <span>Çıxış</span>
-      </a>
-    </div>
-  </header>
-
-  <!-- Main Container -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-6">
-
-    <!-- Top Tabs Navigation -->
-    <div class="flex overflow-x-auto border-b border-borderDark gap-2 text-sm font-semibold pb-0 scrollbar-none">
-      <button id="tabBtnOverview" onclick="switchTab('overview')" class="tab-active px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-        </svg>
-        <span>Ümumi Baxış (Overview)</span>
-      </button>
-
-      <button id="tabBtnCreate" onclick="switchTab('create')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        <span>Yeni Post Paylaş</span>
-      </button>
-
-      <button id="tabBtnHistory" onclick="switchTab('history')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        <span>Paylaşım Tarixçəsi</span>
-      </button>
-
-      <button id="tabBtnModeration" onclick="switchTab('moderation')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-        </svg>
-        <span>Moderasiya & Rollar</span>
-      </button>
-
-      <button id="tabBtnStructure" onclick="switchTab('structure')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-        </svg>
-        <span>Server Strukturu</span>
-      </button>
-
-      <button id="tabBtnBots" onclick="switchTab('bots')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-        </svg>
-        <span>Bot Bələdçiləri</span>
-      </button>
-
-      <button id="tabBtnLogs" onclick="switchTab('logs')" class="tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition">
-        <span>◉</span><span>Loglar</span>
-      </button>
-    </div>
-
-    <!-- Notification Toast Container -->
-    <div id="toast" class="hidden fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 transition-all duration-300">
-      <div id="toastIcon"></div>
-      <div id="toastMessage" class="flex-1"></div>
-      <button onclick="hideToast()" class="text-slate-400 hover:text-white">&times;</button>
-    </div>
-
-    <!-- ==================== TAB 0: OVERVIEW & SYSTEM STATS ==================== -->
-    <div id="tabContentOverview" class="space-y-6">
-      <!-- 4 High Level Stat Cards -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <!-- Servers -->
-        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Discord Serverlər</p>
-            <h3 id="statGuilds" class="text-2xl font-black text-white mt-1">--</h3>
-            <span class="text-[11px] text-indigo-400 font-medium">Bütün serverlərdə aktiv</span>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-          </div>
-        </div>
-
-        <!-- Total Users -->
-        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ümumi İcmalar</p>
-            <h3 id="statUsers" class="text-2xl font-black text-white mt-1">--</h3>
-            <span id="statVoice" class="text-[11px] text-emerald-400 font-medium">-- səsli otaqda</span>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-          </div>
-        </div>
-
-        <!-- Channels -->
-        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kanallar & Postlar</p>
-            <h3 id="statChannels" class="text-2xl font-black text-white mt-1">--</h3>
-            <span id="statScheduled" class="text-[11px] text-amber-400 font-medium">-- planlaşdırılıb</span>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
-          </div>
-        </div>
-
-        <!-- Resources (RAM & Uptime) -->
-        <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
-          <div>
-            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">RAM & İşləmə Vaxtı</p>
-            <h3 id="statRam" class="text-2xl font-black text-white mt-1">-- MB</h3>
-            <span id="statUptime" class="text-[11px] text-cyan-400 font-medium">Uptime: --</span>
-          </div>
-          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
-          </div>
+    <!-- ==================== LEFT RAIL ==================== -->
+    <aside class="rail sticky top-0 h-screen border-r border-borderDark bg-[#0b0c11] flex flex-col">
+      <div class="px-5 py-5 flex items-center gap-3 border-b border-borderDark">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand to-indigo-700 flex items-center justify-center font-display font-bold text-white text-sm shadow-lg shadow-brand/30">a</div>
+        <div class="min-w-0">
+          <div class="font-display font-semibold text-white text-sm leading-tight">abi console</div>
+          <div class="eyebrow">admin · v2</div>
         </div>
       </div>
 
-      <!-- Server Cards Grid -->
-      <div class="glass-card rounded-2xl p-6 border border-borderDark space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-bold text-white">Qoşulduğu Discord Serverləri</h2>
-            <p class="text-xs text-slate-400">Botun hazırda quraşdırıldığı bütün icmalar və onların statistikası</p>
-          </div>
-          <button onclick="loadSystemStats()" class="text-xs px-3 py-1.5 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
-        </div>
-        <div id="overviewGuildsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div class="p-6 text-center text-slate-500 text-sm col-span-full">Statistika yüklənir...</div>
-        </div>
+      <nav class="flex-1 overflow-y-auto py-3 flex flex-col">
+        <button id="tabBtnOverview" onclick="switchTab('overview')" class="tab-active px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+          <span>Ümumi baxış</span>
+        </button>
+
+        <button id="tabBtnCreate" onclick="switchTab('create')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span>Yeni post</span>
+        </button>
+
+        <button id="tabBtnHistory" onclick="switchTab('history')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>Tarixçə</span>
+        </button>
+
+        <button id="tabBtnModeration" onclick="switchTab('moderation')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span>Moderasiya &amp; rollar</span>
+        </button>
+
+        <button id="tabBtnStructure" onclick="switchTab('structure')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+          </svg>
+          <span>Server strukturu</span>
+        </button>
+
+        <button id="tabBtnBots" onclick="switchTab('bots')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+          <span>Bot bələdçiləri</span>
+        </button>
+
+        <button id="tabBtnLogs" onclick="switchTab('logs')" class="tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-9 0h14a1 1 0 001-1V8.5a1 1 0 00-.3-.7l-3-3A1 1 0 0015 4.5V6M5 17a1 1 0 001 1h1"/>
+          </svg>
+          <span>Hadisə jurnalı</span>
+        </button>
+      </nav>
+
+      <div class="px-5 py-4 border-t border-borderDark">
+        <button type="button" onclick="logoutAdmin()" class="w-full flex items-center justify-center gap-2 text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/10 hover:bg-rose-600 px-3.5 py-2.5 rounded-lg border border-rose-500/20 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+          </svg>
+          <span>Çıxış</span>
+        </button>
       </div>
-    </div>
+    </aside>
 
-    <!-- ==================== TAB 1: CREATE POST & LIVE PREVIEW ==================== -->
-    <div id="tabContentCreate" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
-      <!-- Form Column -->
-      <div class="lg:col-span-7 glass-card border border-borderDark rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
-        <div>
-          <h2 class="text-lg font-bold text-white flex items-center gap-2">
-            <span>📝 Post Formu</span>
-          </h2>
-          <p class="text-xs text-slate-400 mt-1">Daxil etdiyiniz məlumatlar avtomatik Discord Embed formatında paylanacaq.</p>
+    <!-- ==================== MAIN COLUMN ==================== -->
+    <div class="flex-1 min-w-0 flex flex-col">
+
+      <!-- Top status bar -->
+      <header class="sticky top-0 z-40 border-b border-borderDark bg-[#0b0c11]/90 backdrop-blur px-4 sm:px-7 py-3.5 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="lg:hidden w-8 h-8 rounded-lg bg-gradient-to-br from-brand to-indigo-700 flex items-center justify-center font-display font-bold text-white text-xs flex-shrink-0">a</div>
+          <div class="min-w-0">
+            <h1 id="pageHeading" class="font-display font-semibold text-white text-sm sm:text-base truncate">Ümumi baxış</h1>
+            <p class="eyebrow truncate">canlı statistika · moderasiya · paylaşım idarəetməsi</p>
+          </div>
         </div>
 
-        <form id="postForm" class="space-y-5" enctype="multipart/form-data">
-          <input type="hidden" id="csrfToken" name="csrf_token" value="" />
+        <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <div class="hidden sm:flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20 glow-emerald font-data">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span id="gatewayStatusText">aktiv</span>
+            <span id="pingBadge" class="text-slate-500 ml-1">...ms</span>
+          </div>
 
-          <!-- Channel Dropdown -->
-          <div>
-            <label for="channelSelect" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-              Hədəf Kanal (Yalnız NSFW / Yaş Məhdudiyyətli) <span class="text-red-400">*</span>
-            </label>
-            <div class="relative">
-              <select
-                id="channelSelect"
-                name="channel_id"
-                required
-                class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition appearance-none cursor-pointer"
-              >
-                <option value="">Kanal yüklənir...</option>
-              </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          <button onclick="refreshCurrentTab()" title="Məlumatları yenilə" class="p-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300 hover:text-white transition">
+            <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Mobile tab bar (same ids reused is not possible; secondary nav for small screens) -->
+      <div class="rail-mobile-bar overflow-x-auto border-b border-borderDark bg-[#0b0c11] px-2">
+        <button onclick="switchTab('overview')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Baxış</button>
+        <button onclick="switchTab('create')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Post</button>
+        <button onclick="switchTab('history')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Tarixçə</button>
+        <button onclick="switchTab('moderation')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Moderasiya</button>
+        <button onclick="switchTab('structure')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Struktur</button>
+        <button onclick="switchTab('bots')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Botlar</button>
+        <button onclick="switchTab('logs')" class="px-3.5 py-3 text-xs font-medium text-slate-300 whitespace-nowrap">Loglar</button>
+      </div>
+
+      <!-- Main Container -->
+      <main class="flex-1 w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-6 max-w-[1400px]">
+
+        <!-- Notification Toast Container -->
+        <div id="toast" class="hidden fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-2xl border text-sm flex items-start gap-3 transition-all duration-300">
+          <div id="toastIcon"></div>
+          <div id="toastMessage" class="flex-1"></div>
+          <button onclick="hideToast()" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+
+        <!-- ==================== TAB 0: OVERVIEW & SYSTEM STATS ==================== -->
+        <div id="tabContentOverview" class="space-y-6">
+          <!-- 4 High Level Stat Cards -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <!-- Servers -->
+            <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+              <div>
+                <p class="eyebrow uppercase">Discord serverlər</p>
+                <h3 id="statGuilds" class="font-display text-2xl font-bold text-white mt-1">--</h3>
+                <span class="text-[11px] text-violet-400 font-medium">Bütün serverlərdə aktiv</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
               </div>
             </div>
-            <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-              Yalnız Discord-da 18+ (NSFW) qeyd edilmiş kanallar dəstəklənir.
-            </p>
-          </div>
 
-          <!-- Title -->
-          <div>
-            <label for="postTitle" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-              Başlıq (Title) <span class="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              id="postTitle"
-              name="title"
-              maxlength="256"
-              required
-              placeholder="Postun qısa və cəlbedici başlığı..."
-              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
-              oninput="updateLivePreview()"
-            />
-          </div>
-
-          <!-- Description -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Açıqlama (Description) <span class="text-red-400">*</span>
-              </label>
-              <span id="charCount" class="text-[11px] text-slate-500 font-mono">0 / 4000</span>
-            </div>
-            <textarea
-              id="postDescription"
-              name="description"
-              rows="5"
-              maxlength="4000"
-              required
-              placeholder="Post mətni..."
-              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition resize-y"
-              oninput="updateLivePreview()"
-            ></textarea>
-          </div>
-
-          <!-- Link URL -->
-          <div>
-            <label for="postLink" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-              Keçid Linki (Daxil ol Düyməsi) <span class="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              id="postLink"
-              name="link_url"
-              required
-              placeholder="https://t.me/... və ya https://..."
-              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
-              oninput="updateLivePreview()"
-            />
-          </div>
-
-          <!-- Scheduled Post Options -->
-          <div class="pt-2 border-t border-borderDark/60">
-            <label for="scheduledTime" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-              Planlaşdırılmış Göndərmə Vaxtı (İstəyə görə)
-            </label>
-            <input
-              type="datetime-local"
-              id="scheduledTime"
-              name="scheduled_time"
-              class="w-full px-4 py-3 bg-[#0c0e14] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition cursor-pointer"
-            />
-            <p class="text-[11px] text-slate-500 mt-1.5">Boş saxlasanız, post dərhal paylanacaq.</p>
-          </div>
-
-          <!-- Multiple Image Upload -->
-          <div class="pt-2 border-t border-borderDark/60">
-            <div class="flex items-center justify-between mb-2">
-              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Şəkillər (Max 10 ədəd, hərəsi max 8MB)
-              </label>
-              <span id="imageCounter" class="text-[11px] font-bold text-slate-400">0 / 10 ədəd</span>
+            <!-- Total Users -->
+            <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+              <div>
+                <p class="eyebrow uppercase">Ümumi icmalar</p>
+                <h3 id="statUsers" class="font-display text-2xl font-bold text-white mt-1">--</h3>
+                <span id="statVoice" class="text-[11px] text-emerald-400 font-medium">-- səsli otaqda</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              </div>
             </div>
 
-            <div class="space-y-4">
-              <div
-                id="dropZone"
-                class="border-2 border-dashed border-borderDark hover:border-brand/60 rounded-xl p-5 text-center cursor-pointer transition bg-[#0c0e14]/50"
-                onclick="document.getElementById('fileInput').click()"
-              >
-                <svg class="mx-auto h-8 w-8 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-                <p class="text-xs text-slate-300 font-medium">Şəkilləri seçin və ya bura atın</p>
-                <p class="text-[10px] text-slate-500 mt-0.5">PNG, JPG, WEBP, GIF dəstəklənir</p>
+            <!-- Channels -->
+            <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+              <div>
+                <p class="eyebrow uppercase">Kanallar &amp; postlar</p>
+                <h3 id="statChannels" class="font-display text-2xl font-bold text-white mt-1">--</h3>
+                <span id="statScheduled" class="text-[11px] text-amber-400 font-medium">-- planlaşdırılıb</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+              </div>
+            </div>
+
+            <!-- Resources (RAM & Uptime) -->
+            <div class="glass-card rounded-2xl p-5 border border-borderDark flex items-center justify-between">
+              <div>
+                <p class="eyebrow uppercase">RAM &amp; işləmə vaxtı</p>
+                <h3 id="statRam" class="font-display text-2xl font-bold text-white mt-1">-- MB</h3>
+                <span id="statUptime" class="text-[11px] text-cyan-400 font-medium">Uptime: --</span>
+              </div>
+              <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Server Cards Grid -->
+          <div class="glass-card rounded-2xl p-6 border border-borderDark space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h2 class="font-display text-base font-semibold text-white">Qoşulduğu Discord serverləri</h2>
+                <p class="text-xs text-slate-400">Botun hazırda quraşdırıldığı bütün icmalar və onların statistikası</p>
+              </div>
+              <button onclick="loadSystemStats()" class="text-xs px-3 py-1.5 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
+            </div>
+            <div id="overviewGuildsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div class="p-6 text-center text-slate-500 text-sm col-span-full">Statistika yüklənir...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 1: CREATE POST & LIVE PREVIEW ==================== -->
+        <div id="tabContentCreate" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <!-- Form Column -->
+          <div class="lg:col-span-7 glass-card border border-borderDark rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+            <div>
+              <h2 class="font-display text-lg font-semibold text-white flex items-center gap-2">
+                <span>Post formu</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-1">Daxil etdiyiniz məlumatlar avtomatik Discord Embed formatında paylanacaq.</p>
+            </div>
+
+            <form id="postForm" class="space-y-5" enctype="multipart/form-data">
+              <input type="hidden" id="csrfToken" name="csrf_token" value="" />
+
+              <!-- Channel Dropdown -->
+              <div>
+                <label for="channelSelect" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                  Hədəf kanal (yalnız NSFW / yaş məhdudiyyətli) <span class="text-rose-400">*</span>
+                </label>
+                <div class="relative">
+                  <select
+                    id="channelSelect"
+                    name="channel_id"
+                    required
+                    class="w-full px-4 py-3 bg-[#0c0d12] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition appearance-none cursor-pointer"
+                  >
+                    <option value="">Kanal yüklənir...</option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  Yalnız Discord-da 18+ (NSFW) qeyd edilmiş kanallar dəstəklənir.
+                </p>
+              </div>
+
+              <!-- Title -->
+              <div>
+                <label for="postTitle" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                  Başlıq (Title) <span class="text-rose-400">*</span>
+                </label>
                 <input
-                  type="file"
-                  id="fileInput"
-                  multiple
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  class="hidden"
-                  onchange="handleFileSelection(this)"
+                  type="text"
+                  id="postTitle"
+                  name="title"
+                  maxlength="256"
+                  required
+                  placeholder="Postun qısa və cəlbedici başlığı..."
+                  class="w-full px-4 py-3 bg-[#0c0d12] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+                  oninput="updateLivePreview()"
                 />
               </div>
 
-              <!-- Thumbnails Preview Container -->
-              <div id="thumbnailsContainer" class="hidden grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2"></div>
+              <!-- Description -->
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <label for="postDescription" class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Açıqlama (Description) <span class="text-rose-400">*</span>
+                  </label>
+                  <span id="charCount" class="text-[11px] text-slate-500 font-data">0 / 4000</span>
+                </div>
+                <textarea
+                  id="postDescription"
+                  name="description"
+                  rows="5"
+                  maxlength="4000"
+                  required
+                  placeholder="Post mətni..."
+                  class="w-full px-4 py-3 bg-[#0c0d12] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition resize-y"
+                  oninput="updateLivePreview()"
+                ></textarea>
+              </div>
+
+              <!-- Link URL -->
+              <div>
+                <label for="postLink" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                  Keçid linki (daxil ol düyməsi) <span class="text-rose-400">*</span>
+                </label>
+                <input
+                  type="url"
+                  id="postLink"
+                  name="link_url"
+                  required
+                  placeholder="https://t.me/... və ya https://..."
+                  class="w-full px-4 py-3 bg-[#0c0d12] border border-borderDark rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-brand focus:outline-none transition"
+                  oninput="updateLivePreview()"
+                />
+              </div>
+
+              <!-- Scheduled Post Options -->
+              <div class="pt-2 border-t border-borderDark/60">
+                <label for="scheduledTime" class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
+                  Planlaşdırılmış göndərmə vaxtı (istəyə görə)
+                </label>
+                <input
+                  type="datetime-local"
+                  id="scheduledTime"
+                  name="scheduled_time"
+                  class="w-full px-4 py-3 bg-[#0c0d12] border border-borderDark rounded-xl text-white focus:ring-2 focus:ring-brand focus:outline-none transition cursor-pointer"
+                />
+                <p class="text-[11px] text-slate-500 mt-1.5">Boş saxlasanız, post dərhal paylanacaq.</p>
+              </div>
+
+              <!-- Multiple Image Upload -->
+              <div class="pt-2 border-t border-borderDark/60">
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                    Şəkillər (max 10 ədəd, hərəsi max 8MB)
+                  </label>
+                  <span id="imageCounter" class="text-[11px] font-bold text-slate-400 font-data">0 / 10 ədəd</span>
+                </div>
+
+                <div class="space-y-4">
+                  <div
+                    id="dropZone"
+                    class="border-2 border-dashed border-borderDark hover:border-brand/60 rounded-xl p-5 text-center cursor-pointer transition bg-[#0c0d12]/50"
+                    onclick="document.getElementById('fileInput').click()"
+                  >
+                    <svg class="mx-auto h-8 w-8 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <p class="text-xs text-slate-300 font-medium">Şəkilləri seçin və ya bura atın</p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">PNG, JPG, WEBP, GIF dəstəklənir</p>
+                    <input
+                      type="file"
+                      id="fileInput"
+                      multiple
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      class="hidden"
+                      onchange="handleFileSelection(this)"
+                    />
+                  </div>
+
+                  <!-- Thumbnails Preview Container -->
+                  <div id="thumbnailsContainer" class="hidden grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2"></div>
+                </div>
+              </div>
+
+              <!-- Submit Button -->
+              <div class="pt-4 border-t border-borderDark">
+                <button
+                  type="submit"
+                  id="submitBtn"
+                  class="w-full py-4 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg shadow-brand/25 flex items-center justify-center gap-2 transition cursor-pointer"
+                >
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                  </svg>
+                  <span id="submitBtnText">Discord kanalına paylaş</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Live Discord Preview Column -->
+          <div class="lg:col-span-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h2 class="eyebrow uppercase flex items-center gap-2">
+                <span>Canlı Discord önbaxışı</span>
+              </h2>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-cardHeader text-slate-400 font-data">CLIENT RENDER</span>
+            </div>
+
+            <div class="bg-[#313338] rounded-xl p-4 sm:p-5 shadow-2xl border border-white/5 space-y-3 font-sans">
+              <!-- Discord User Message Header -->
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-brand flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  <span class="text-white font-bold text-xs" id="previewBotInitial">A</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-white text-sm" id="previewBotName">Abi Bot</span>
+                    <span class="bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">BOT</span>
+                    <span class="text-slate-400 text-xs font-normal" id="previewTimestamp">Bu gün saat 02:45</span>
+                  </div>
+
+                  <!-- Embed Body Container -->
+                  <div class="mt-2.5 max-w-full rounded bg-[#2b2d31] border-l-4 border-brand p-3.5 space-y-3 text-slate-300 text-xs sm:text-sm shadow-md">
+                    <div id="previewTitle" class="font-bold text-white text-base leading-snug">Başlıq burada görünəcək</div>
+                    <div id="previewDesc" class="whitespace-pre-wrap leading-relaxed break-words text-slate-300">Açıqlama mətni burada nümayiş olunacaq...</div>
+
+                    <!-- Embed Media Container -->
+                    <div id="previewMediaWrap" class="hidden overflow-hidden rounded-lg aspect-video bg-[#1e1f22] relative">
+                      <img id="previewMediaImg" src="" alt="Post Preview" class="w-full h-full object-cover" />
+                      <div id="previewExtraBadge" class="hidden absolute bottom-2 right-2 bg-black/75 px-2 py-1 rounded text-[11px] font-bold text-white">+0 şəkil</div>
+                    </div>
+
+                    <div class="text-[11px] text-slate-400 pt-2 border-t border-white/5 flex items-center justify-between">
+                      <span>Abi Post Sistemi</span>
+                      <span id="previewDateStr">29.10.2026</span>
+                    </div>
+                  </div>
+
+                  <!-- Discord Interactive Buttons -->
+                  <div class="mt-2.5 flex flex-wrap gap-2">
+                    <a
+                      id="previewLinkBtn"
+                      href="#"
+                      target="_blank"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand text-white font-medium text-xs hover:bg-brandHover transition pointer-events-none"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                      <span>Daxil ol</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          <!-- Submit Button -->
-          <div class="pt-4 border-t border-borderDark">
-            <button
-              type="submit"
-              id="submitBtn"
-              class="w-full py-4 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg shadow-brand/25 flex items-center justify-center gap-2 transition cursor-pointer"
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-              </svg>
-              <span id="submitBtnText">Discord Kanalına Paylaş</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <!-- Live Discord Preview Column -->
-      <div class="lg:col-span-5 space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-            <span>Canlı Discord Önbaxışı (1:1 Live Preview)</span>
-          </h2>
-          <span class="text-[10px] px-2 py-0.5 rounded bg-cardHeader text-slate-400 font-mono">CLIENT RENDER</span>
         </div>
 
-        <div class="bg-[#313338] rounded-xl p-4 sm:p-5 shadow-2xl border border-white/5 space-y-3 font-sans">
-          <!-- Discord User Message Header -->
-          <div class="flex items-start gap-3">
-            <div class="w-10 h-10 rounded-full bg-brand flex-shrink-0 flex items-center justify-center overflow-hidden">
-              <span class="text-white font-bold text-xs" id="previewBotInitial">A</span>
+        <!-- ==================== TAB 2: POSTS HISTORY ==================== -->
+        <div id="tabContentHistory" class="hidden space-y-6">
+          <div class="glass-card border border-borderDark rounded-2xl p-6 flex items-center justify-between">
+            <div>
+              <h2 class="font-display text-base font-semibold text-white">Göndərilmiş və planlaşdırılmış postlar</h2>
+              <p class="text-xs text-slate-400">Verilənlər bazasındakı bütün paylaşımların statusu və idarə olunması</p>
             </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-semibold text-white text-sm" id="previewBotName">Abi Bot</span>
-                <span class="bg-brand text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">BOT</span>
-                <span class="text-slate-400 text-xs font-normal" id="previewTimestamp">Bu gün saat 02:45</span>
+            <button onclick="loadHistory()" class="text-xs px-3.5 py-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
+          </div>
+
+          <div class="glass-card border border-borderDark rounded-2xl overflow-hidden shadow-xl">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-cardHeader text-[11px] uppercase tracking-wider text-slate-400 font-semibold font-data">
+                  <tr>
+                    <th class="px-5 py-4">ID / tarix</th>
+                    <th class="px-5 py-4">Başlıq &amp; link</th>
+                    <th class="px-5 py-4">Kanal</th>
+                    <th class="px-5 py-4">Status</th>
+                    <th class="px-5 py-4">Şəkillər</th>
+                    <th class="px-5 py-4 text-right">Əməliyyatlar</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody" class="divide-y divide-borderDark/40">
+                  <tr>
+                    <td colspan="6" class="px-5 py-8 text-center text-slate-500">Tarixçə yüklənir...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 3: MODERATION & ROLES ==================== -->
+        <div id="tabContentModeration" class="hidden space-y-6">
+          <!-- Top Filters -->
+          <div class="glass-card border border-borderDark rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Server seçin</label>
+              <select id="modGuildSelect" onchange="onModerationGuildChange()" class="w-full px-3 py-2.5 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv axtar</label>
+              <input id="modMemberSearch" oninput="scheduleMemberSearch()" placeholder="Ad, ləqəb və ya Discord ID..." class="w-full px-3 py-2.5 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv seçin</label>
+              <select id="modMemberSelect" onchange="onModerationMemberChange()" class="w-full px-3 py-2.5 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white"></select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Moderation Actions Form -->
+            <div class="lg:col-span-5 glass-card border border-borderDark rounded-2xl p-6 space-y-5">
+              <h2 class="font-display text-base font-semibold text-white flex items-center gap-2">
+                <span>Moderasiya tədbirləri</span>
+              </h2>
+
+              <div id="modUnbanWrap" class="hidden">
+                <label class="block text-xs text-slate-400 mb-1">Banlı istifadəçi ID-si</label>
+                <input id="modUnbanId" inputmode="numeric" placeholder="18 rəqəmli Discord User ID" class="w-full p-3 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white" />
               </div>
 
-              <!-- Embed Body Container -->
-              <div class="mt-2.5 max-w-full rounded bg-[#2b2d31] border-l-4 border-brand p-3.5 space-y-3 text-slate-300 text-xs sm:text-sm shadow-md">
-                <div id="previewTitle" class="font-bold text-white text-base leading-snug">Başlıq burada görünəcək</div>
-                <div id="previewDesc" class="whitespace-pre-wrap leading-relaxed break-words text-slate-300">Açıqlama mətni burada nümayiş olunacaq...</div>
-                
-                <!-- Embed Media Container -->
-                <div id="previewMediaWrap" class="hidden overflow-hidden rounded-lg aspect-video bg-[#1e1f22] relative">
-                  <img id="previewMediaImg" src="" alt="Post Preview" class="w-full h-full object-cover" />
-                  <div id="previewExtraBadge" class="hidden absolute bottom-2 right-2 bg-black/75 px-2 py-1 rounded text-[11px] font-bold text-white">+0 şəkil</div>
-                </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Cəza / tədbir növü</label>
+                <select id="modAction" onchange="updateModerationForm()" class="w-full p-3 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white">
+                  <option value="warn">Xəbərdarlıq (warn)</option>
+                  <option value="timeout">Timeout (mute)</option>
+                  <option value="untimeout">Timeout-u aç</option>
+                  <option value="kick">Serverdən çıxar (kick)</option>
+                  <option value="ban">Qadağan et (ban)</option>
+                  <option value="unban">Banı aç (unban)</option>
+                </select>
+              </div>
 
-                <div class="text-[11px] text-slate-400 pt-2 border-t border-white/5 flex items-center justify-between">
-                  <span>Abi Post Sistemi</span>
-                  <span id="previewDateStr">29.10.2026</span>
+              <div id="modDurationWrap" class="hidden">
+                <label class="block text-xs text-slate-400 mb-1">Müddət (dəqiqə ilə, max 40320)</label>
+                <input id="modDuration" type="number" min="1" max="40320" value="10" class="w-full p-3 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white" />
+              </div>
+
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Səbəb</label>
+                <textarea id="modReason" rows="3" maxlength="500" placeholder="Qayda pozuntusunun səbəbi..." class="w-full p-3 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white"></textarea>
+              </div>
+
+              <button onclick="submitModerationAction()" class="w-full py-3 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg transition">
+                Əməliyyatı icra et
+              </button>
+              <p id="modFeedback" class="text-xs text-slate-400 text-center"></p>
+            </div>
+
+            <!-- Member Profile & Role Management -->
+            <div class="lg:col-span-7 space-y-6">
+              <!-- Member Quick Info Card -->
+              <div id="memberProfileCard" class="glass-card border border-borderDark rounded-2xl p-5 flex items-center gap-4">
+                <div id="memberAvatarWrap" class="w-16 h-16 rounded-2xl bg-cardHeader overflow-hidden flex-shrink-0 border border-white/10 flex items-center justify-center text-xl font-bold text-slate-400">
+                  ?
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 id="memberName" class="text-base font-bold text-white truncate">Üzv seçilməyib</h3>
+                  <p id="memberTag" class="text-xs text-slate-400 truncate">Məlumatları görmək üçün yuxarıdan üzv seçin</p>
+                  <div id="memberDates" class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-3"></div>
                 </div>
               </div>
 
-              <!-- Discord Interactive Buttons -->
-              <div class="mt-2.5 flex flex-wrap gap-2">
-                <a
-                  id="previewLinkBtn"
-                  href="#"
-                  target="_blank"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-brand text-white font-medium text-xs hover:bg-brandHover transition pointer-events-none"
-                >
+              <!-- Roles Manager -->
+              <div class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-bold text-white">İstifadəçinin rolları (veb idarəetmə)</h3>
+                    <p class="text-xs text-slate-400">Rolu əlavə etmək və ya silmək üçün birbaşa üzərinə klikləyin</p>
+                  </div>
+                  <button onclick="loadUserRoles()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+                </div>
+                <div id="memberRolesContainer" class="flex flex-wrap gap-2 pt-2">
+                  <span class="text-xs text-slate-500">Üzv seçildikdən sonra rollar burada açılacaq.</span>
+                </div>
+              </div>
+
+              <!-- Warning history is temporarily disabled; records remain in the database. -->
+              <div class="hidden glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h3 class="text-sm font-bold text-white">Xəbərdarlıq tarixçəsi</h3>
+                    <p id="warningTotal" class="text-xs text-slate-400">Üzv seçin</p>
+                  </div>
+                  <button onclick="loadWarnings()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+                </div>
+                <div id="warningHistory" class="space-y-2.5 text-xs text-slate-300 max-h-64 overflow-y-auto pr-1">
+                  Üzv seçiləndə xəbərdarlıqlar burada görünür.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 4: SERVER STRUCTURE ==================== -->
+        <div id="tabContentStructure" class="hidden space-y-6">
+          <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="font-display text-base font-semibold text-white">Server kanalları və strukturu</h2>
+              <p class="text-xs text-slate-400">Serverdəki kateqoriyalar, mətn/səs kanalları və icazə iyerarxiyası</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <select id="structureGuildSelect" onchange="loadServerStructure()" class="px-3 py-2 bg-[#0c0d12] border border-borderDark rounded-xl text-xs text-white"></select>
+              <button onclick="loadServerStructure()" class="text-xs px-3 py-2 rounded-lg bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
+            </div>
+          </div>
+
+          <div id="structureTreeContainer" class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+            <div class="text-center text-slate-500 py-8 text-sm">Server strukturu yüklənir...</div>
+          </div>
+        </div>
+
+        <!-- ==================== TAB 5: BOT GUIDES & COMMANDS ==================== -->
+        <div id="tabContentBots" class="hidden space-y-6">
+          <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+            <div>
+              <h2 class="font-display text-base font-semibold text-white">Bot əmrləri</h2>
+              <p class="text-xs text-slate-400">Botda hazırda aktiv olan prefiks və slash əmrləri, izahı və tələb olunan icazələr.</p>
+            </div>
+            <input id="commandCatalogSearch" oninput="renderCommandCatalog()" placeholder="Əmr adı və ya izah üzrə axtar..." class="w-full px-3 py-2.5 bg-[#0c0d12] border border-borderDark rounded-xl text-sm text-white" />
+            <div id="commandCatalog" class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div class="text-xs text-slate-500 py-6 text-center">Əmrlər yüklənir...</div>
+            </div>
+          </div>
+
+          <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 class="font-display text-base font-semibold text-white">Rəsmi bot sənədləri və komandaları</h2>
+              <p class="text-xs text-slate-400">Serverinizdə olan Carl, MEE6, Dyno və digər botların rəsmi komanda bələdçiləri</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <select id="botsGuildSelect" onchange="loadGuildBots()" class="px-3 py-2 bg-[#0c0d12] border border-borderDark rounded-xl text-xs text-white"></select>
+            </div>
+          </div>
+
+          <div class="hidden">
+            <!-- Bots list in Guild -->
+            <div class="lg:col-span-4 glass-card border border-borderDark rounded-2xl p-5 space-y-3">
+              <h3 class="eyebrow uppercase">Serverdəki botlar</h3>
+              <div id="guildBotsList" class="space-y-2 max-h-[600px] overflow-y-auto">
+                <div class="text-xs text-slate-500 p-2">Server seçin...</div>
+              </div>
+            </div>
+
+            <!-- Bot Command Details -->
+            <div class="lg:col-span-8 glass-card border border-borderDark rounded-2xl p-6 space-y-4">
+              <div class="flex items-center justify-between border-b border-borderDark pb-3">
+                <div>
+                  <h3 id="botGuideName" class="text-base font-bold text-white">Bot seçilməyib</h3>
+                  <p id="botGuideDesc" class="text-xs text-slate-400">Soldakı siyahıdan bot seçərək rəsmi komandalarını oxuya bilərsiniz</p>
+                </div>
+                <a id="botGuideLink" href="#" target="_blank" class="hidden text-xs text-violet-400 hover:underline flex items-center gap-1">
+                  <span>Rəsmi sənədlər</span>
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                  <span>Daxil ol</span>
                 </a>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- ==================== TAB 2: POSTS HISTORY ==================== -->
-    <div id="tabContentHistory" class="hidden space-y-6">
-      <div class="glass-card border border-borderDark rounded-2xl p-6 flex items-center justify-between">
-        <div>
-          <h2 class="text-base font-bold text-white">Göndərilmiş və Planlaşdırılmış Postlar</h2>
-          <p class="text-xs text-slate-400">Verilənlər bazasındakı bütün paylaşımların statusu və idarə olunması</p>
-        </div>
-        <button onclick="loadHistory()" class="text-xs px-3.5 py-2 rounded-lg bg-cardHeader hover:bg-borderDark border border-borderDark text-slate-300">Yenilə</button>
-      </div>
-
-      <div class="glass-card border border-borderDark rounded-2xl overflow-hidden shadow-xl">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm text-slate-300">
-            <thead class="bg-cardHeader text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-              <tr>
-                <th class="px-5 py-4">ID / Tarix</th>
-                <th class="px-5 py-4">Başlıq & Link</th>
-                <th class="px-5 py-4">Kanal</th>
-                <th class="px-5 py-4">Status</th>
-                <th class="px-5 py-4">Şəkillər</th>
-                <th class="px-5 py-4 text-right">Əməliyyatlar</th>
-              </tr>
-            </thead>
-            <tbody id="historyTableBody" class="divide-y divide-borderDark/40">
-              <tr>
-                <td colspan="6" class="px-5 py-8 text-center text-slate-500">Tarixçə yüklənir...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== TAB 3: MODERATION & ROLES ==================== -->
-    <div id="tabContentModeration" class="hidden space-y-6">
-      <!-- Top Filters -->
-      <div class="glass-card border border-borderDark rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Server Seçin</label>
-          <select id="modGuildSelect" onchange="onModerationGuildChange()" class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv Axtar</label>
-          <input id="modMemberSearch" oninput="scheduleMemberSearch()" placeholder="Ad, ləqəb və ya Discord ID..." class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Üzv Seçin</label>
-          <select id="modMemberSelect" onchange="onModerationMemberChange()" class="w-full px-3 py-2.5 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></select>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- Moderation Actions Form -->
-        <div class="lg:col-span-5 glass-card border border-borderDark rounded-2xl p-6 space-y-5">
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <span>🛡️ Moderasiya Tədbirləri</span>
-          </h2>
-
-          <div id="modUnbanWrap" class="hidden">
-            <label class="block text-xs text-slate-400 mb-1">Banlı İstifadəçi ID-si</label>
-            <input id="modUnbanId" inputmode="numeric" placeholder="18 rəqəmli Discord User ID" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
-          </div>
-
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">Cəza / Tədbir Növü</label>
-            <select id="modAction" onchange="updateModerationForm()" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white">
-              <option value="warn">⚠️ Xəbərdarlıq (Warn)</option>
-              <option value="timeout">⏳ Timeout (Mute)</option>
-              <option value="untimeout">🔓 Timeout-u aç</option>
-              <option value="kick">👢 Serverdən çıxar (Kick)</option>
-              <option value="ban">🔨 Qadağan et (Ban)</option>
-              <option value="unban">✨ Banı aç (Unban)</option>
-            </select>
-          </div>
-
-          <div id="modDurationWrap" class="hidden">
-            <label class="block text-xs text-slate-400 mb-1">Müddət (dəqiqə ilə, max 40320)</label>
-            <input id="modDuration" type="number" min="1" max="40320" value="10" class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white" />
-          </div>
-
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">Səbəb</label>
-            <textarea id="modReason" rows="3" maxlength="500" placeholder="Qayda pozuntusunun səbəbi..." class="w-full p-3 bg-[#0c0e14] border border-borderDark rounded-xl text-sm text-white"></textarea>
-          </div>
-
-          <button onclick="submitModerationAction()" class="w-full py-3 bg-brand hover:bg-brandHover text-white font-bold rounded-xl shadow-lg transition">
-            Əməliyyatı İcra Et
-          </button>
-          <p id="modFeedback" class="text-xs text-slate-400 text-center"></p>
-        </div>
-
-        <!-- Member Profile & Role Management -->
-        <div class="lg:col-span-7 space-y-6">
-          <!-- Member Quick Info Card -->
-          <div id="memberProfileCard" class="glass-card border border-borderDark rounded-2xl p-5 flex items-center gap-4">
-            <div id="memberAvatarWrap" class="w-16 h-16 rounded-2xl bg-cardHeader overflow-hidden flex-shrink-0 border border-white/10 flex items-center justify-center text-xl font-bold text-slate-400">
-              ?
-            </div>
-            <div class="flex-1 min-w-0">
-              <h3 id="memberName" class="text-base font-bold text-white truncate">Üzv seçilməyib</h3>
-              <p id="memberTag" class="text-xs text-slate-400 truncate">Məlumatları görmək üçün yuxarıdan üzv seçin</p>
-              <div id="memberDates" class="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-3"></div>
-            </div>
-          </div>
-
-          <!-- Roles Manager -->
-          <div class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-sm font-bold text-white">İstifadəçinin Rolları (Veb İdarəetmə)</h3>
-                <p class="text-xs text-slate-400">Rolu əlavə etmək və ya silmək üçün birbaşa üzərinə klikləyin</p>
+              <div id="botCommandsContainer" class="space-y-2.5 max-h-[500px] overflow-y-auto">
+                <div class="text-xs text-slate-500 py-12 text-center">Komandaları görmək üçün bot seçin.</div>
               </div>
-              <button onclick="loadUserRoles()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
-            </div>
-            <div id="memberRolesContainer" class="flex flex-wrap gap-2 pt-2">
-              <span class="text-xs text-slate-500">Üzv seçildikdən sonra rollar burada açılacaq.</span>
-            </div>
-          </div>
-
-          <!-- Warnings History -->
-          <div class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <h3 class="text-sm font-bold text-white">Xəbərdarlıq Tarixçəsi</h3>
-                <p id="warningTotal" class="text-xs text-slate-400">Üzv seçin</p>
-              </div>
-              <button onclick="loadWarnings()" class="text-xs px-2.5 py-1 rounded bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
-            </div>
-            <div id="warningHistory" class="space-y-2.5 text-xs text-slate-300 max-h-64 overflow-y-auto pr-1">
-              Üzv seçiləndə xəbərdarlıqlar burada görünür.
             </div>
           </div>
         </div>
-      </div>
+
+        <section id="tabContentLogs" class="hidden space-y-6">
+          <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
+            <div><h2 class="font-display text-lg font-semibold text-white">Hadisə mərkəzi</h2><p class="text-xs text-slate-400 mt-1">Hər hadisəni ayrıca aktiv edin və öz Discord kanalına yönləndirin. Kanal boşdursa, yalnız arxivə yazılır.</p></div>
+            <select id="logsGuildSelect" onchange="loadLogSettings()" class="px-3 py-2 rounded-xl text-sm min-w-56"><option>Serverlər yüklənir...</option></select>
+          </div>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="logSummary"></div>
+          <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between"><div><h3 class="font-bold text-white">Log marşrutları</h3><p class="text-xs text-slate-400">Hadisə növü üçün kanal və aktivlik seçin.</p></div><button onclick="saveLogSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm text-white">Sazlamaları yadda saxla</button></div>
+            <div id="logSettingsGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"><p class="text-sm text-slate-500">Server seçin.</p></div>
+          </div>
+          <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+            <div><h3 class="font-bold text-white">Arxiv və analitika</h3><p class="text-xs text-slate-400">Tarix aralığını seçib hadisələrdə axtarış edin.</p></div>
+            <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <input id="logsStart" type="date" class="px-3 py-2 text-sm" />
+              <input id="logsEnd" type="date" class="px-3 py-2 text-sm" />
+              <select id="logsEventFilter" class="px-3 py-2 text-sm"><option value="">Bütün hadisələr</option></select>
+              <input id="logsSearch" placeholder="Üzv, icraçı, detal..." class="px-3 py-2 text-sm" />
+              <button onclick="loadLogsData()" class="px-4 py-2 rounded-xl bg-cardHeader border border-borderDark text-sm">Axtar / yenilə</button>
+            </div>
+            <div class="grid lg:grid-cols-3 gap-4">
+              <div class="lg:col-span-2 rounded-xl border border-borderDark p-4"><h4 class="eyebrow uppercase mb-3">Hadisələr üzrə say</h4><div id="logAnalytics" class="space-y-2 text-sm text-slate-300">Tarix seçin.</div></div>
+              <div class="rounded-xl border border-borderDark p-4"><h4 class="eyebrow uppercase mb-3">Ən çox dəvət edənlər</h4><div id="logInviters" class="space-y-2 text-sm text-slate-300">Məlumat yoxdur.</div></div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-borderDark"><table class="w-full text-left text-sm"><thead class="bg-cardHeader text-xs uppercase text-slate-400 font-data"><tr><th class="p-3">Vaxt</th><th class="p-3">Hadisə</th><th class="p-3">İcraçı / üzv</th><th class="p-3">Detallar</th></tr></thead><tbody id="logsArchive"><tr><td colspan="4" class="p-6 text-center text-slate-500">Arxiv yüklənməyib.</td></tr></tbody></table></div>
+          </div>
+        </section>
+
+      </main>
     </div>
-
-    <!-- ==================== TAB 4: SERVER STRUCTURE ==================== -->
-    <div id="tabContentStructure" class="hidden space-y-6">
-      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 class="text-base font-bold text-white">Server Kanalları və Strukturu</h2>
-          <p class="text-xs text-slate-400">Serverdəki kateqoriyalar, mətn/səs kanalları və icazə iyerarxiyası</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <select id="structureGuildSelect" onchange="loadServerStructure()" class="px-3 py-2 bg-[#0c0e14] border border-borderDark rounded-xl text-xs text-white"></select>
-          <button onclick="loadServerStructure()" class="text-xs px-3 py-2 rounded-lg bg-cardHeader border border-borderDark text-slate-300">Yenilə</button>
-        </div>
-      </div>
-
-      <div id="structureTreeContainer" class="glass-card border border-borderDark rounded-2xl p-6 space-y-4">
-        <div class="text-center text-slate-500 py-8 text-sm">Server strukturu yüklənir...</div>
-      </div>
-    </div>
-
-    <!-- ==================== TAB 5: BOT GUIDES & COMMANDS ==================== -->
-    <div id="tabContentBots" class="hidden space-y-6">
-      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 class="text-base font-bold text-white">Rəsmi Bot Sənədləri və Komandaları</h2>
-          <p class="text-xs text-slate-400">Serverinizdə olan Carl, MEE6, Dyno və digər botların rəsmi komanda bələdçiləri</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <select id="botsGuildSelect" onchange="loadGuildBots()" class="px-3 py-2 bg-[#0c0e14] border border-borderDark rounded-xl text-xs text-white"></select>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- Bots list in Guild -->
-        <div class="lg:col-span-4 glass-card border border-borderDark rounded-2xl p-5 space-y-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Serverdəki Botlar</h3>
-          <div id="guildBotsList" class="space-y-2 max-h-[600px] overflow-y-auto">
-            <div class="text-xs text-slate-500 p-2">Server seçin...</div>
-          </div>
-        </div>
-
-        <!-- Bot Command Details -->
-        <div class="lg:col-span-8 glass-card border border-borderDark rounded-2xl p-6 space-y-4">
-          <div class="flex items-center justify-between border-b border-borderDark pb-3">
-            <div>
-              <h3 id="botGuideName" class="text-base font-bold text-white">Bot Seçilməyib</h3>
-              <p id="botGuideDesc" class="text-xs text-slate-400">Soldakı siyahıdan bot seçərək rəsmi komandalarını oxuya bilərsiniz</p>
-            </div>
-            <a id="botGuideLink" href="#" target="_blank" class="hidden text-xs text-indigo-400 hover:underline flex items-center gap-1">
-              <span>Rəsmi Sənədlər</span>
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-            </a>
-          </div>
-
-          <div id="botCommandsContainer" class="space-y-2.5 max-h-[500px] overflow-y-auto">
-            <div class="text-xs text-slate-500 py-12 text-center">Komandaları görmək üçün bot seçin.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <section id="tabContentLogs" class="hidden space-y-6">
-      <div class="glass-card border border-borderDark rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4">
-        <div><h2 class="text-lg font-bold text-white">Hadisə mərkəzi</h2><p class="text-xs text-slate-400 mt-1">Hər hadisəni ayrıca aktiv edin və öz Discord kanalına yönləndirin. Kanal boşdursa, yalnız arxivə yazılır.</p></div>
-        <select id="logsGuildSelect" onchange="loadLogSettings()" class="px-3 py-2 rounded-xl text-sm min-w-56"><option>Serverlər yüklənir...</option></select>
-      </div>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="logSummary"></div>
-      <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
-        <div class="flex items-center justify-between"><div><h3 class="font-bold text-white">Log marşrutları</h3><p class="text-xs text-slate-400">Hadisə növü üçün kanal və aktivlik seçin.</p></div><button onclick="saveLogSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm">Sazlamaları yadda saxla</button></div>
-        <div id="logSettingsGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"><p class="text-sm text-slate-500">Server seçin.</p></div>
-      </div>
-      <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
-        <div><h3 class="font-bold text-white">Arxiv və analitika</h3><p class="text-xs text-slate-400">Tarix aralığını seçib hadisələrdə axtarış edin.</p></div>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <input id="logsStart" type="date" class="px-3 py-2 text-sm" />
-          <input id="logsEnd" type="date" class="px-3 py-2 text-sm" />
-          <select id="logsEventFilter" class="px-3 py-2 text-sm"><option value="">Bütün hadisələr</option></select>
-          <input id="logsSearch" placeholder="Üzv, icraçı, detal..." class="px-3 py-2 text-sm" />
-          <button onclick="loadLogsData()" class="px-4 py-2 rounded-xl bg-cardHeader border border-borderDark text-sm">Axtar / yenilə</button>
-        </div>
-        <div class="grid lg:grid-cols-3 gap-4">
-          <div class="lg:col-span-2 rounded-xl border border-borderDark p-4"><h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Hadisələr üzrə say</h4><div id="logAnalytics" class="space-y-2 text-sm text-slate-300">Tarix seçin.</div></div>
-          <div class="rounded-xl border border-borderDark p-4"><h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Ən çox dəvət edənlər</h4><div id="logInviters" class="space-y-2 text-sm text-slate-300">Məlumat yoxdur.</div></div>
-        </div>
-        <div class="overflow-x-auto rounded-xl border border-borderDark"><table class="w-full text-left text-sm"><thead class="bg-cardHeader text-xs uppercase text-slate-400"><tr><th class="p-3">Vaxt</th><th class="p-3">Hadisə</th><th class="p-3">İcraçı / üzv</th><th class="p-3">Detallar</th></tr></thead><tbody id="logsArchive"><tr><td colspan="4" class="p-6 text-center text-slate-500">Arxiv yüklənməyib.</td></tr></tbody></table></div>
-      </div>
-    </section>
-
-  </main>
+  </div>
 
   <script>
     let globalCsrfToken = "";
+    async function logoutAdmin() {
+      try {
+        const res = await fetch("/admin/logout", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({csrf_token:globalCsrfToken})});
+        const data = await res.json();
+        if (data.success) window.location.href = data.redirect || "/admin/login";
+        else showToast(data.error || "Çıxış mümkün olmadı", "error");
+      } catch (_) { showToast("Çıxış mümkün olmadı", "error"); }
+    }
     let selectedFilesCache = [];
     let memberSearchTimer = null;
     let currentTab = "overview";
 
+    const pageHeadings = {
+      overview: "Ümumi baxış", create: "Yeni post", history: "Tarixçə",
+      moderation: "Moderasiya & rollar", structure: "Server strukturu",
+      bots: "Bot bələdçiləri", logs: "Hadisə jurnalı"
+    };
+
     document.addEventListener("DOMContentLoaded", async () => {
+      document.querySelector('#modAction option[value="warn"]')?.remove();
+      const commandsTabLabel = document.querySelector("#tabBtnBots span");
+      if (commandsTabLabel) commandsTabLabel.textContent = "Komandalar";
+      pageHeadings.bots = "Bot əmrləri";
       await fetchSessionInfo();
       await loadSystemStats();
       await fetchChannels();
@@ -704,15 +785,17 @@
         if (content) content.classList.toggle("hidden", t !== tab);
         if (btn) {
           btn.className = (t === tab)
-            ? "tab-active px-4 py-3 flex items-center gap-2 whitespace-nowrap transition"
-            : "tab-inactive px-4 py-3 flex items-center gap-2 whitespace-nowrap transition";
+            ? "tab-active px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left"
+            : "tab-inactive px-5 py-3 flex items-center gap-3 whitespace-nowrap transition text-sm font-medium text-left";
         }
       });
+      const heading = document.getElementById("pageHeading");
+      if (heading) heading.textContent = pageHeadings[tab] || "";
 
       if (tab === "overview") loadSystemStats();
       else if (tab === "history") loadHistory();
       else if (tab === "structure") loadStructureGuilds();
-      else if (tab === "bots") loadBotsGuilds();
+      else if (tab === "bots") loadCommandCatalog();
       else if (tab === "logs") loadLogGuilds();
     }
 
@@ -730,7 +813,7 @@
       else if (currentTab === "history") loadHistory();
       else if (currentTab === "moderation") { loadModerationGuilds(); onModerationMemberChange(); }
       else if (currentTab === "structure") loadServerStructure();
-      else if (currentTab === "bots") loadGuildBots();
+      else if (currentTab === "bots") loadCommandCatalog();
       else if (currentTab === "logs") loadLogsData();
     }
 
@@ -754,10 +837,10 @@
         if (!data.success) throw new Error(data.error || "Yükləmə alınmadı");
         window.logEventData = data.events; window.logChannelData = data.channels;
         const groups = [...new Set(data.events.map(e => e.group))];
-        box.innerHTML = groups.map(group => `<div class="rounded-xl border border-borderDark p-3 space-y-2"><h4 class="text-xs font-bold uppercase tracking-wider text-indigo-300">${escapeHtml(group)}</h4>${data.events.filter(e => e.group === group).map(e => {
+        box.innerHTML = groups.map(group => `<div class="rounded-xl border border-borderDark p-3 space-y-2"><h4 class="text-xs font-bold uppercase tracking-wider text-violet-300">${escapeHtml(group)}</h4>${data.events.filter(e => e.group === group).map(e => {
           logLabels[e.key] = e.label;
           const options = `<option value="">Yalnız arxiv</option>` + data.channels.map(c => `<option value="${c.id}" ${String(e.channel_id||"")===String(c.id)?"selected":""}>#${escapeHtml(c.name)}${c.category?" · "+escapeHtml(c.category):""}</option>`).join("");
-          return `<div class="bg-[#0c0e14] rounded-lg p-2.5 space-y-2"><div class="flex items-center justify-between gap-2"><span class="text-xs text-slate-200">${escapeHtml(e.label)}</span><label class="relative inline-flex items-center cursor-pointer"><input data-log-enabled="${e.key}" type="checkbox" ${e.enabled?"checked":""} class="sr-only peer"><span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-indigo-600 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></span></label></div><select data-log-channel="${e.key}" class="w-full px-2 py-1.5 text-xs">${options}</select></div>`;
+          return `<div class="bg-[#0c0d12] rounded-lg p-2.5 space-y-2"><div class="flex items-center justify-between gap-2"><span class="text-xs text-slate-200">${escapeHtml(e.label)}</span><label class="relative inline-flex items-center cursor-pointer"><input data-log-enabled="${e.key}" type="checkbox" ${e.enabled?"checked":""} class="sr-only peer"><span class="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-violet-600 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></span></label></div><select data-log-channel="${e.key}" class="w-full px-2 py-1.5 text-xs">${options}</select></div>`;
         }).join("")}</div>`).join("");
         const filter = document.getElementById("logsEventFilter");
         filter.innerHTML = '<option value="">Bütün hadisələr</option>' + data.events.map(e => `<option value="${e.key}">${escapeHtml(e.label)}</option>`).join("");
@@ -784,10 +867,10 @@
         if (!archive.success) throw new Error(archive.error||"Arxiv oxunmadı");
         const counts = Object.fromEntries((analytics.by_event||[]).map(x=>[x.event_key, Number(x.count)]));
         const total = Object.values(counts).reduce((a,b)=>a+b,0); const join = counts.member_join||0; const leave = counts.member_leave||0;
-        document.getElementById("logSummary").innerHTML = [["Nəticə",total],["Giriş",join],["Çıxış",leave],["Bu səhifə",archive.events.length]].map(x=>`<div class="glass-card rounded-xl p-4"><p class="text-xs text-slate-400">${x[0]}</p><p class="text-2xl font-black text-indigo-300">${x[1].toLocaleString()}</p></div>`).join("");
-        document.getElementById("logsArchive").innerHTML = archive.events.length ? archive.events.map(e=>`<tr><td class="p-3 whitespace-nowrap text-xs text-slate-400">${new Date(e.created_at).toLocaleString()}</td><td class="p-3 font-semibold text-slate-200">${escapeHtml(logLabels[e.event_key]||e.event_key)}</td><td class="p-3 text-xs">${escapeHtml(e.actor_name||"—")} ${e.target_name?`→ ${escapeHtml(e.target_name)}`:""}</td><td class="p-3 text-xs text-slate-400">${escapeHtml(Object.entries(e.details||{}).map(([k,v])=>`${k}: ${typeof v==="object"?JSON.stringify(v):v}`).join(" · ").slice(0,600)||e.title)}</td></tr>`).join("") : '<tr><td colspan="4" class="p-6 text-center text-slate-500">Bu filtr üçün hadisə yoxdur.</td></tr>';
+        document.getElementById("logSummary").innerHTML = [["Nəticə",total],["Giriş",join],["Çıxış",leave],["Bu səhifə",archive.events.length]].map(x=>`<div class="glass-card rounded-xl p-4"><p class="text-xs text-slate-400">${x[0]}</p><p class="text-2xl font-bold text-violet-300 font-display">${x[1].toLocaleString()}</p></div>`).join("");
+        document.getElementById("logsArchive").innerHTML = archive.events.length ? archive.events.map(e=>`<tr><td class="p-3 whitespace-nowrap text-xs text-slate-400 font-data">${new Date(e.created_at).toLocaleString()}</td><td class="p-3 font-semibold text-slate-200">${escapeHtml(logLabels[e.event_key]||e.event_key)}</td><td class="p-3 text-xs">${escapeHtml(e.actor_name||"—")} ${e.target_name?`→ ${escapeHtml(e.target_name)}`:""}</td><td class="p-3 text-xs text-slate-400">${escapeHtml(Object.entries(e.details||{}).map(([k,v])=>`${k}: ${typeof v==="object"?JSON.stringify(v):v}`).join(" · ").slice(0,600)||e.title)}</td></tr>`).join("") : '<tr><td colspan="4" class="p-6 text-center text-slate-500">Bu filtr üçün hadisə yoxdur.</td></tr>';
         if (analytics.success) {
-          document.getElementById("logAnalytics").innerHTML = analytics.by_event.length ? analytics.by_event.map(x=>`<div class="flex items-center justify-between gap-3"><span>${escapeHtml(logLabels[x.event_key]||x.event_key)}</span><span class="font-mono text-indigo-300">${x.count}</span></div>`).join("") : "Hadisə yoxdur.";
+          document.getElementById("logAnalytics").innerHTML = analytics.by_event.length ? analytics.by_event.map(x=>`<div class="flex items-center justify-between gap-3"><span>${escapeHtml(logLabels[x.event_key]||x.event_key)}</span><span class="font-data text-violet-300">${x.count}</span></div>`).join("") : "Hadisə yoxdur.";
           document.getElementById("logInviters").innerHTML = analytics.top_inviters.length ? analytics.top_inviters.map((x,i)=>`<div class="flex items-center justify-between gap-2"><span>${i+1}. ${escapeHtml(x.actor_name||"Naməlum")}</span><b class="text-emerald-300">${x.count}</b></div>`).join("") : "Məlumat yoxdur.";
         }
       } catch(e) { document.getElementById("logsArchive").innerHTML = `<tr><td colspan="4" class="p-5 text-rose-300">${escapeHtml(e.message)}</td></tr>`; }
@@ -819,7 +902,7 @@
         const grid = document.getElementById("overviewGuildsGrid");
         if (data.guilds && data.guilds.length) {
           grid.innerHTML = data.guilds.map(g => `
-            <div class="glass-panel p-4 rounded-xl flex items-center justify-between border border-borderDark hover:border-indigo-500/40 transition">
+            <div class="glass-panel p-4 rounded-xl flex items-center justify-between border border-borderDark hover:border-violet-500/40 transition">
               <div class="flex items-center gap-3 min-w-0">
                 <div class="w-11 h-11 rounded-xl bg-cardHeader border border-white/5 overflow-hidden flex-shrink-0 flex items-center justify-center font-bold text-slate-300">
                   ${g.icon ? `<img src="${g.icon}" class="w-full h-full object-cover"/>` : escapeHtml(g.name.slice(0, 2))}
@@ -829,7 +912,7 @@
                   <p class="text-xs text-slate-400">${g.members.toLocaleString()} üzv · ${g.channels} kanal</p>
                 </div>
               </div>
-              <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Aktiv</span>
+              <span class="text-[10px] uppercase font-bold px-2 py-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 font-data">Aktiv</span>
             </div>
           `).join("");
         } else {
@@ -848,7 +931,7 @@
         const data = await res.json();
         if (data.success && data.channels) {
           if (data.channels.length === 0) {
-            select.innerHTML = '<option value="">⚠️ Heç bir NSFW (18+) mətn kanalı tapılmadı</option>';
+            select.innerHTML = '<option value="">Heç bir NSFW (18+) mətn kanalı tapılmadı</option>';
             return;
           }
           select.innerHTML = '<option value="">-- Kanal Seçin --</option>' +
@@ -986,7 +1069,7 @@
         showToast("Şəbəkə xətası baş verdi", "error");
       } finally {
         btn.disabled = false;
-        btnText.innerText = "Discord Kanalına Paylaş";
+        btnText.innerText = "Discord kanalına paylaş";
       }
     });
 
@@ -1016,19 +1099,19 @@
 
           return `
             <tr class="hover:bg-cardHeader/40 transition">
-              <td class="px-5 py-4 font-mono text-xs">
+              <td class="px-5 py-4 font-data text-xs">
                 <span class="font-bold text-white">#${p.id}</span>
                 <div class="text-[10px] text-slate-500">${p.created_at}</div>
               </td>
               <td class="px-5 py-4 max-w-xs">
                 <div class="font-semibold text-white truncate">${escapeHtml(p.title)}</div>
-                <a href="${escapeHtml(p.link_url)}" target="_blank" class="text-indigo-400 hover:underline text-[11px] truncate block">${escapeHtml(p.link_url)}</a>
+                <a href="${escapeHtml(p.link_url)}" target="_blank" class="text-violet-400 hover:underline text-[11px] truncate block">${escapeHtml(p.link_url)}</a>
               </td>
               <td class="px-5 py-4 text-xs text-slate-300">${escapeHtml(p.channel_name || "Bilinmir")}</td>
               <td class="px-5 py-4">${badge}</td>
               <td class="px-5 py-4 text-xs text-slate-400">${p.image_count || 0} ədəd</td>
               <td class="px-5 py-4 text-right space-x-2">
-                <button onclick="resendPost(${p.id})" class="text-xs px-2.5 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-600 hover:text-white transition">Yenidən Göndər</button>
+                <button onclick="resendPost(${p.id})" class="text-xs px-2.5 py-1.5 rounded-lg bg-violet-500/10 text-violet-400 hover:bg-violet-600 hover:text-white transition">Yenidən göndər</button>
                 <button onclick="deletePost(${p.id})" class="text-xs px-2.5 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white transition">Sil</button>
               </td>
             </tr>
@@ -1119,7 +1202,6 @@
 
       loadMemberProfile(guildId, userId);
       loadUserRoles();
-      loadWarnings();
     }
 
     async function loadMemberProfile(guildId, userId) {
@@ -1131,12 +1213,12 @@
           document.getElementById("memberName").innerText = m.name;
           document.getElementById("memberTag").innerText = `@${m.username} · ID: ${m.id}`;
           document.getElementById("memberAvatarWrap").innerHTML = `<img src="${m.avatar}" class="w-full h-full object-cover"/>`;
-          
+
           const joinStr = m.joined_at ? new Date(m.joined_at).toLocaleDateString() : "Bilinmir";
           const createStr = new Date(m.created_at).toLocaleDateString();
           document.getElementById("memberDates").innerHTML = `
-            <span>📅 Qoşuldu: <b class="text-slate-300">${joinStr}</b></span>
-            <span>🎂 Hesab tarixi: <b class="text-slate-300">${createStr}</b></span>
+            <span>Qoşuldu: <b class="text-slate-300">${joinStr}</b></span>
+            <span>Hesab tarixi: <b class="text-slate-300">${createStr}</b></span>
           `;
         }
       } catch (_) {}
@@ -1161,7 +1243,7 @@
 
         container.innerHTML = data.roles.map(r => {
           const isAssigned = r.assigned;
-          const bgStyle = isAssigned ? `background-color: ${r.color}22; border-color: ${r.color}; color: white;` : `border-color: #222838; color: #94a3b8;`;
+          const bgStyle = isAssigned ? `background-color: ${r.color}22; border-color: ${r.color}; color: white;` : `border-color: #23242e; color: #94a3b8;`;
           return `
             <button
               type="button"
@@ -1224,7 +1306,7 @@
         root.innerHTML = data.warnings.length ? data.warnings.map(w => `
           <div class="glass-panel p-3 rounded-xl border border-borderDark space-y-1">
             <div class="flex justify-between text-[11px] text-slate-500">
-              <span class="font-mono text-indigo-400">#${w.id} · ${w.date}</span>
+              <span class="font-data text-violet-400">#${w.id} · ${w.date}</span>
               <span>Mod: ${w.moderator_id || "Admin"}</span>
             </div>
             <p class="text-slate-200">${escapeHtml(w.reason)}</p>
@@ -1256,7 +1338,7 @@
       }
 
       fb.innerText = "İcra olunur...";
-      fb.className = "text-xs text-indigo-400 text-center";
+      fb.className = "text-xs text-violet-400 text-center";
 
       try {
         const res = await fetch("/admin/api/moderation/action", {
@@ -1276,7 +1358,6 @@
           fb.innerText = data.message || "Uğurla tamamlandı!";
           fb.className = "text-xs text-emerald-400 text-center";
           showToast(data.message, "success");
-          loadWarnings();
         } else {
           fb.innerText = data.error || "Xəta baş verdi";
           fb.className = "text-xs text-rose-400 text-center";
@@ -1320,14 +1401,14 @@
           html += `
             <div class="glass-panel p-4 rounded-xl border border-borderDark space-y-2">
               <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
                 <span>${escapeHtml(c.name)}</span>
               </div>
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pl-4 pt-1">
                 ${sub.map(ch => `
                   <div class="flex items-center gap-2 text-xs text-slate-300 py-1 px-2.5 rounded bg-black/30 border border-white/5">
                     <span>${ch.type === 'voice' ? '🔊' : '#'}</span>
-                    <span class="truncate font-mono">${escapeHtml(ch.name)}</span>
+                    <span class="truncate font-data">${escapeHtml(ch.name)}</span>
                   </div>
                 `).join('') || '<span class="text-xs text-slate-600">Bu kateqoriyada kanal yoxdur</span>'}
               </div>
@@ -1340,12 +1421,12 @@
         if (uncategorized.length > 0) {
           html += `
             <div class="glass-panel p-4 rounded-xl border border-borderDark space-y-2">
-              <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Kateqoriyasız Kanallar</div>
+              <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Kateqoriyasız kanallar</div>
               <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pl-4 pt-1">
                 ${uncategorized.map(ch => `
                   <div class="flex items-center gap-2 text-xs text-slate-300 py-1 px-2.5 rounded bg-black/30 border border-white/5">
                     <span>${ch.type === 'voice' ? '🔊' : '#'}</span>
-                    <span class="truncate font-mono">${escapeHtml(ch.name)}</span>
+                    <span class="truncate font-data">${escapeHtml(ch.name)}</span>
                   </div>
                 `).join('')}
               </div>
@@ -1360,6 +1441,46 @@
     }
 
     /* ==================== BOT GUIDES ==================== */
+    let commandCatalogItems = [];
+    async function loadCommandCatalog() {
+      const root = document.getElementById("commandCatalog");
+      if (!root) return;
+      root.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">Əmrlər yüklənir...</div>';
+      try {
+        const res = await fetch("/admin/api/commands");
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "Əmrlər yüklənmədi.");
+        commandCatalogItems = data.commands || [];
+        renderCommandCatalog();
+      } catch (error) {
+        root.innerHTML = `<div class="text-xs text-rose-400 py-6 text-center">${escapeHtml(error.message || "Əmrlər yüklənmədi.")}</div>`;
+      }
+    }
+
+    function renderCommandCatalog() {
+      const root = document.getElementById("commandCatalog");
+      const query = (document.getElementById("commandCatalogSearch")?.value || "").trim().toLocaleLowerCase();
+      if (!root) return;
+      const items = commandCatalogItems.filter(item =>
+        `${item.name} ${item.usage} ${item.purpose} ${item.permission} ${(item.aliases || []).join(" ")}`.toLocaleLowerCase().includes(query)
+      );
+      if (!items.length) {
+        root.innerHTML = '<div class="text-xs text-slate-500 py-6 text-center">Uyğun əmr tapılmadı.</div>';
+        return;
+      }
+      root.innerHTML = items.map(item => `
+        <article class="glass-panel border border-borderDark rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="font-data text-sm font-bold text-violet-300">${escapeHtml(item.usage)}</h3>
+            <span class="text-[10px] uppercase tracking-wide text-slate-400 border border-borderDark rounded px-2 py-1">${escapeHtml(item.type)}</span>
+          </div>
+          <p class="text-xs text-slate-300">${escapeHtml(item.purpose)}</p>
+          <div class="text-[11px] text-slate-400">İcazə: ${escapeHtml(item.permission)}</div>
+          ${(item.aliases || []).length ? `<div class="text-[11px] text-slate-500">Alias: ${item.aliases.map(escapeHtml).join(", ")}</div>` : ""}
+        </article>
+      `).join("");
+    }
+
     async function loadBotsGuilds() {
       const select = document.getElementById("botsGuildSelect");
       try {
@@ -1388,12 +1509,12 @@
         list.innerHTML = data.bots.map(b => `
           <button
             onclick="loadBotCommands('${b.provider || ''}', '${escapeHtml(b.name)}', '${b.avatar}')"
-            class="w-full text-left p-2.5 rounded-xl border border-borderDark hover:border-indigo-500/50 hover:bg-cardHeader transition flex items-center gap-3"
+            class="w-full text-left p-2.5 rounded-xl border border-borderDark hover:border-violet-500/50 hover:bg-cardHeader transition flex items-center gap-3"
           >
             <img src="${b.avatar}" class="w-8 h-8 rounded-lg object-cover flex-shrink-0"/>
             <div class="min-w-0 flex-1">
               <div class="text-xs font-bold text-white truncate">${escapeHtml(b.name)}</div>
-              <div class="text-[10px] text-slate-400 font-mono">${b.provider ? 'Dəstəklənən Bələdçi' : 'Xüsusi Bot'}</div>
+              <div class="text-[10px] text-slate-400 font-data">${b.provider ? 'Dəstəklənən bələdçi' : 'Xüsusi bot'}</div>
             </div>
           </button>
         `).join("");
@@ -1427,10 +1548,10 @@
           root.innerHTML = data.commands.map(c => `
             <div class="glass-panel p-3 rounded-xl border border-borderDark flex items-start justify-between gap-4">
               <div class="min-w-0">
-                <span class="font-mono text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">${escapeHtml(c.name || c.command || '')}</span>
+                <span class="font-data text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">${escapeHtml(c.name || c.command || '')}</span>
                 <p class="text-xs text-slate-300 mt-1">${escapeHtml(c.description || c.desc || 'Açıqlama qeyd olunmayıb')}</p>
               </div>
-              <span class="text-[10px] text-slate-500 font-mono flex-shrink-0">${escapeHtml(c.syntax || '')}</span>
+              <span class="text-[10px] text-slate-500 font-data flex-shrink-0">${escapeHtml(c.syntax || '')}</span>
             </div>
           `).join("");
         } else {

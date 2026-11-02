@@ -41,6 +41,22 @@ LOG_EVENTS = [
 ]
 LOG_EVENT_MAP = {item["key"]: item for item in LOG_EVENTS}
 
+# Hər qrup üçün rəng + kiçik emoji — embed başlığı və sərhədini fərqləndirir.
+NEUTRAL = 0x262624  # avenox.io referansındakı isti qara — Discord fonunda demək olar görünməz xətt
+GROUP_STYLE = {
+    "Üzvlər":     {"color": NEUTRAL, "emoji": "✦"},
+    "Dəvətlər":   {"color": NEUTRAL, "emoji": "✦"},
+    "Mesajlar":   {"color": NEUTRAL, "emoji": "✦"},
+    "Moderasiya": {"color": 0xB4443C, "emoji": "✦"},
+    "Rollar":     {"color": NEUTRAL, "emoji": "✦"},
+    "Kanallar":   {"color": NEUTRAL, "emoji": "✦"},
+    "Server":     {"color": NEUTRAL, "emoji": "✦"},
+    "Səs":        {"color": NEUTRAL, "emoji": "✦"},
+    "Sistem":     {"color": 0xB4443C, "emoji": "✦"},
+}
+
+DEFAULT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
+
 
 def _display(value):
     if value is None:
@@ -52,38 +68,147 @@ def _display(value):
     return ident, str(name)[:200]
 
 
-def make_embed(event_key, title, actor=None, target=None, channel=None, details=None, created_at=None):
+def _mention(value):
+    """Return a clickable <@id> mention when possible, else just the display name."""
+    ident, name = _display(value)
+    if ident is not None:
+        return f"<@{ident}>", name
+    return name, name
+
+
+def _avatar_url(value):
+    avatar = getattr(value, "display_avatar", None) or getattr(value, "avatar", None)
+    url = getattr(avatar, "url", None)
+    return str(url) if url else None
+
+
+def _guild_icon_url(guild):
+    icon = getattr(guild, "icon", None)
+    url = getattr(icon, "url", None)
+    return str(url) if url else None
+
+
+import re
+
+_ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+INVITE_ROWS = {"Dəvət edən": "dəvət edən", "Dəvət linki": "link", "Dəvət kodu": "kod"}
+INVITE_EVENTS = {"member_join", "invite_use", "invite_create", "invite_delete"}
+ROW_LABELS = {
+    "Discord hesabı yaradılıb": "hesab", "Serverə qoşulub": "qoşuldu", "Serverə qoşulma vaxtı": "qoşulmuşdu",
+    "Səbəb": "səbəb", "İzah": "qeyd", "Mesaj ID": "mesaj id", "Əvvəlki kanal": "əvvəl", "Yeni kanal": "indi",
+    "Əməliyyat": "əməliyyat", "Ləqəb": "ləqəb", "İstifadəçi adı": "ad", "Avatar": "avatar",
+    "İstifadə limiti": "limit", "İstifadə sayı": "say", "Komanda": "komanda", "Xəta": "xəta", "İcraçı": "icraçı",
+    "Dəyişikliklər": "dəyişiklik", "Silinən mesaj sayı": "silinən", "Mesajlar": "mesajlar", "Qeyd": "qeyd",
+    "Əlavə edildi": "əlavə", "Silindi": "silindi", "Əvvəlki qoşmalar": "köhnə qoşma", "Yeni qoşmalar": "yeni qoşma",
+    "Timeout əvvəl": "əvvəl", "Timeout sonra": "sonra",
+}
+_EMPTY_VALUES = {"", "—", "naməlum", "naməlum / vanity", "yoxdur"}
+RULE = "┈" * 14
+
+
+def _fmt_value(raw):
+    """Pretty-print detail values: Discord timestamps, lists."""
+    if isinstance(raw, (list, tuple)):
+        items = [str(x) if not isinstance(x, (dict, list)) else json.dumps(x, ensure_ascii=False, default=str) for x in raw]
+        return "\n".join(f"• {i}" for i in items) if items else "—"
+    if isinstance(raw, dict):
+        return json.dumps(raw, ensure_ascii=False, default=str)
+    value = str(raw).strip()
+    if _ISO_RE.match(value):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ts = int(dt.timestamp())
+            return f"<t:{ts}:d> · <t:{ts}:R>"
+        except ValueError:
+            pass
+    return value or "—"
+
+
+def _row(label, value):
+    return f"`{label:<12}` {value}"
+
+
+def make_embed(event_key, title, actor=None, target=None, channel=None, details=None,
+               created_at=None, bot_avatar_url=None, guild_icon_url=None):
     info = LOG_EVENT_MAP.get(event_key, {"label": event_key, "group": "Sistem"})
-    color = {
-        "Üzvlər": 0x57F287, "Dəvətlər": 0x5865F2, "Mesajlar": 0x3498DB,
-        "Moderasiya": 0xED4245, "Rollar": 0x9B59B6, "Kanallar": 0x1ABC9C,
-        "Server": 0xF1C40F, "Səs": 0x2ECC71, "Sistem": 0x95A5A6,
-    }.get(info["group"], 0x5865F2)
-    embed = discord.Embed(title=f"{info['label']} · {title}"[:256], color=color,
+    style = GROUP_STYLE.get(info["group"], {"color": NEUTRAL, "emoji": "✦"})
+    details = dict(details or {})
+
+    actor_mention, actor_name = _mention(actor)
+    target_mention, target_name = _mention(target)
+    target_id, _ = _display(target)
+    actor_is_obj = actor is not None and not isinstance(actor, str)
+
+    rows = []
+    if event_key in INVITE_EVENTS:
+        # Əsas hədəf (kim qoşuldu / kim yaratdı)
+        if target_name:
+            rows.append(_row("üzv", target_mention))
+        # DƏVƏT BLOKU — həmişə göstərilir: kim dəvət edib, hansı link, hansı kod
+        inviter = actor_mention if actor_name else (details.get("Dəvət edən") or "")
+        if str(inviter).strip().lower() in _EMPTY_VALUES:
+            inviter = "müəyyən edilmədi"
+        rows.append(_row("dəvət edən", inviter))
+        link = str(details.get("Dəvət linki", "")).strip()
+        code = str(details.get("Dəvət kodu", "")).strip()
+        rows.append(_row("link", link if link.lower() not in _EMPTY_VALUES else "müəyyən edilmədi"))
+        rows.append(_row("kod", f"`{code}`" if code.lower() not in _EMPTY_VALUES else "müəyyən edilmədi"))
+        for k in INVITE_ROWS:
+            details.pop(k, None)
+        if channel is not None:
+            rows.append(_row("kanal", getattr(channel, "mention", None) or getattr(channel, "name", None) or str(channel)))
+    else:
+        if actor_name:
+            rows.append(_row("icraçı", actor_mention))
+        if target_name:
+            rows.append(_row("hədəf", target_mention))
+        if channel is not None:
+            rows.append(_row("kanal", getattr(channel, "mention", None) or getattr(channel, "name", None) or str(channel)))
+
+    # Qısa dəyərlər sətir kimi, uzunlar ayrıca sahə kimi
+    long_fields = []
+    for key, raw in details.items():
+        value = _fmt_value(raw)
+        if value.strip().lower() in _EMPTY_VALUES:
+            continue
+        label = ROW_LABELS.get(str(key), str(key).lower())
+        if len(value) <= 70 and "\n" not in value and not value.startswith("•") and len(label) <= 12:
+            rows.append(_row(label, value))
+        else:
+            long_fields.append((label, value))
+
+    body = [f"{style['emoji']} **{title}**", RULE]
+    body.extend(rows)
+    embed = discord.Embed(description="\n".join(body)[:4000], color=style["color"],
                           timestamp=created_at or datetime.now(timezone.utc))
-    _, actor_name = _display(actor)
-    _, target_name = _display(target)
-    if actor_name:
-        embed.add_field(name="İcraçı", value=actor_name, inline=True)
-    if target_name:
-        embed.add_field(name="Hədəf", value=target_name, inline=True)
-    if channel is not None:
-        channel_name = getattr(channel, "mention", None) or getattr(channel, "name", None) or str(channel)
-        embed.add_field(name="Kanal", value=str(channel_name)[:1024], inline=True)
-    remaining = max(0, 5800 - len(embed.title or "") - sum(len(field.name) + len(field.value) for field in embed.fields))
-    for key, raw in (details or {}).items():
-        value = raw if isinstance(raw, str) else json.dumps(raw, ensure_ascii=False, default=str)
-        value = str(value).strip() or "—"
-        field_name = str(key)[:256]
-        value_limit = min(1024, remaining - len(field_name))
-        if value_limit <= 0:
+    embed.set_author(name=info["label"].lower(), icon_url=guild_icon_url or DEFAULT_AVATAR)
+
+    thumb = _avatar_url(target) or _avatar_url(actor)
+    if thumb:
+        embed.set_thumbnail(url=thumb)
+
+    remaining = max(0, 5400 - len(embed.description or ""))
+    for label, value in long_fields:
+        if value.startswith("•"):
+            shown = value
+        elif len(value) > 120 or "\n" in value:
+            shown = f"```{value[:900]}```"
+        else:
+            shown = "\n".join(f"> {ln}" for ln in value.splitlines())
+        limit = min(1024, remaining - len(label))
+        if limit <= 0 or len(embed.fields) >= 20:
             break
-        value = value[:value_limit]
-        embed.add_field(name=field_name, value=value, inline=False)
-        remaining -= len(field_name) + len(value)
-        if len(embed.fields) >= 20 or remaining <= 0:
-            break
-    embed.set_footer(text=f"{info['group']} · abi-bot")
+        shown = shown[:limit]
+        embed.add_field(name=label, value=shown, inline=False)
+        remaining -= len(label) + len(shown)
+
+    footer = info["group"].lower()
+    if target_id:
+        footer = f"{footer}  ·  id {target_id}"
+    embed.set_footer(text=footer, icon_url=bot_avatar_url or DEFAULT_AVATAR)
     return embed
 
 
@@ -114,7 +239,12 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
     if not isinstance(destination, discord.TextChannel):
         return event_id
     try:
-        await destination.send(embed=make_embed(event_key, title, actor, target, channel, details, created_at))
+        bot_user = getattr(bot, "user", None)
+        bot_avatar_url = _avatar_url(bot_user)
+        guild_icon_url = _guild_icon_url(guild)
+        embed = make_embed(event_key, title, actor, target, channel, details, created_at,
+                           bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
+        await destination.send(embed=embed)
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("Log kanala göndərilmədi | guild=%s event=%s channel=%s: %s",
                        guild.id, event_key, destination_id, exc)

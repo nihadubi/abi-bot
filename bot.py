@@ -1,7 +1,9 @@
 import asyncio
+from contextlib import closing
 import logging
 import os
 import re
+import sqlite3
 from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -29,20 +31,10 @@ BASE_DIR = Path(__file__).resolve().parent
 BOT_OWNER_USERNAMES = {"nihadubi"}  # Discord username və ya display name
 
 # Moderasiya və anti-spam ayarları
-ANTI_SPAM_ENABLED = True
+ANTI_SPAM_ENABLED = False
 SPAM_WINDOW_SECONDS = 8
 SPAM_MESSAGE_THRESHOLD = 5
 SPAM_TIMEOUT_MINUTES = 2
-
-
-# Level mükafat rolları (admin server rol ID-lərini doldurur)
-LEVEL_ROLE_REWARDS = {
-    # 5: 123456789012345678,
-    # 10: 234567890123456789,
-}
-
-XP_AWARD_COOLDOWN_SECONDS = 60
-XP_MIN_MEMBERS_IN_VOICE = int(os.getenv("XP_MIN_MEMBERS_IN_VOICE", "1"))
 
 
 intents = discord.Intents.default()
@@ -53,7 +45,29 @@ intents.moderation = True
 intents.invites = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
-db = Database("voice_stats.db")
+# Baza faylını layihə qovluğunda saxlayırıq. SQLite backup açıq DB-dən də tutarlı
+# snapshot götürür; xam DB/WAL/SHM fayllarını os.replace ilə daşımaq olmaz.
+DB_FILE = str(BASE_DIR / "abi_bot.db")
+OLD_DB_FILE = str(BASE_DIR / "voice_stats.db")
+if not os.path.exists(DB_FILE) and os.path.exists(OLD_DB_FILE):
+    migration_file = DB_FILE + ".migrating"
+    try:
+        with closing(sqlite3.connect(OLD_DB_FILE, timeout=30)) as source, closing(sqlite3.connect(migration_file, timeout=30)) as destination:
+            source.backup(destination)
+        os.replace(migration_file, DB_FILE)
+    except (OSError, sqlite3.Error) as error:
+        # Keep the existing database usable if Windows or another process prevents a snapshot.
+        try:
+            if os.path.exists(migration_file):
+                os.remove(migration_file)
+        except OSError:
+            pass
+        DB_FILE = OLD_DB_FILE
+        logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
+        logging.getLogger("abi_bot").warning(
+            "DB migration to abi_bot.db did not complete; continuing with voice_stats.db: %s", error
+        )
+db = Database(DB_FILE)
 bot.db = db
 
 # Log sistemini aktivləşdiririk
@@ -67,8 +81,6 @@ spam_tracker = defaultdict(deque)
 
 invite_cache = {}
 invite_locks = defaultdict(asyncio.Lock)
-
-# XP üçün vaxt qeydləri
 
 BRAND_COLOR = 0x5865F2
 SUCCESS_COLOR = 0x57F287
@@ -195,9 +207,12 @@ COMMAND_GUIDANCE = {
     "hesabat": ("`abi hesabat [gun/hefte/ay]`", "`abi hesabat hefte`"),
 }
 
+for temporarily_disabled_command in ("warn", "warnings", "warnlar", "delwarn", "clearwarn"):
+    COMMAND_GUIDANCE.pop(temporarily_disabled_command, None)
+
 
 def get_command_guidance(command_name: str):
-    return COMMAND_GUIDANCE.get(command_name, (f"`abi {command_name}`", "`abi komandalar`"))
+    return COMMAND_GUIDANCE.get(command_name, (f"`abi {command_name}`", "Əmr formatını yoxlayın."))
 
 
 PERMISSION_LABELS = {
@@ -459,10 +474,40 @@ async def generate_ilis_text(member: discord.Member) -> str:
     return f"{member.mention} profilə baxdım: {status_text}, rollar da {roles_text}. Bu qədər sakit/çoxrollu olub söhbətə qoşulmamaq ayrıca istedaddır 😄"
 
 
-# ==================== TEMPVOICE UI (MODALLAR VƏ DÜYMƏLƏR) ====================
+# ==================== BOT STATUS ====================
+
+STATUS_TRACKS = [
+    "Would?", "Rooster", "Them Bones", "Down In A Hole", "Angry Chair",
+    "We Die Young", "I Can’t Remember", "It Ain’t Like That", "Man in the Box",
+    "Bleed The Freak", "Confusion", "Love, Hate, Love", "All I Am", "Nutshell",
+    "Don’t Follow", "I Stay Away", "Rotten Apple", "Whale & Wasp",
+    "Sludge Factory", "Frogs", "Over Now",
+]
+STATUS_ROTATION_SECONDS = 10 * 60
+status_track_index = 0
+status_rotation_task = None
+
+
+async def rotate_bot_status():
+    global status_track_index
+    while not bot.is_closed():
+        try:
+            await bot.change_presence(
+                activity=discord.CustomActivity(name=STATUS_TRACKS[status_track_index]),
+                status=discord.Status.online,
+            )
+            await asyncio.sleep(STATUS_ROTATION_SECONDS)
+            status_track_index = (status_track_index + 1) % len(STATUS_TRACKS)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Bot statusunun yenilənməsi alınmadı.")
+            await asyncio.sleep(60)
+
 
 @bot.event
 async def on_ready():
+    global status_rotation_task
     # Opus audio kitabxanasını aktivləşdiririk
     if not discord.opus.is_loaded():
         try:
@@ -474,16 +519,15 @@ async def on_ready():
     for guild in bot.guilds:
         await initialize_invite_cache(guild)
 
-    # Bot açıldıqda View-ləri qeydiyyatdan keçiririk
-    await bot.change_presence(
-        activity=discord.CustomActivity(
-            name="/komandalar"
-        ),
-        status=discord.Status.online
-    )
-
-    if not random_tag_roast_task.is_running():
-        random_tag_roast_task.start()
+    # Start one rotation task only; reconnects reuse it and restore the current title.
+    if status_rotation_task is None or status_rotation_task.done():
+        status_track_index = 0
+        status_rotation_task = asyncio.create_task(rotate_bot_status())
+    else:
+        await bot.change_presence(
+            activity=discord.CustomActivity(name=STATUS_TRACKS[status_track_index]),
+            status=discord.Status.online,
+        )
 
     try:
         synced = await bot.tree.sync()
@@ -725,7 +769,7 @@ async def on_message(message: discord.Message):
         return
 
     # DM-də anti-spam tətbiq etmirik, amma command/AI işləsin
-    if message.guild and isinstance(message.author, discord.Member):
+    if ANTI_SPAM_ENABLED and message.guild and isinstance(message.author, discord.Member):
         try:
             exempt = is_exempt_member(message.author)
 
@@ -792,7 +836,8 @@ async def on_message(message: discord.Message):
         if bot.get_command(cmd_name):
             is_prefix_cmd = True
 
-    should_trigger_ai = (is_mentioned or is_reply_to_bot or (starts_with_abi and not is_prefix_cmd))
+    # AI sohbeti mÃ¼vÉ™qqÉ™ti sÃ¶ndÃ¼rÃ¼lÃ¼b; bot yalnÄ±z aktiv prefix É™mrlÉ™rini emal edir.
+    should_trigger_ai = False
 
     if should_trigger_ai:
         # Mesajdan bot mention-larını və 'abi' sözünü təmizləyib sual mətnini çıxarırıq
@@ -824,7 +869,6 @@ async def on_message(message: discord.Message):
                 await message.reply(ai_response)
         return
 
-    # Mətn kanalında mesaj yazdıqca XP verilməsi (hər 60 saniyədən bir 5-12 XP)
     await bot.process_commands(message)
 
 
@@ -853,7 +897,7 @@ async def on_command_error(ctx, error):
                 f"**`{error.param.name}`** hissəsini yazmamısınız.\n\n"
                 f"**Düzgün istifadə:** {usage}\n"
                 f"**Nümunə:** {example}\n\n"
-                "Ətraflı siyahı üçün: `abi komandalar`"
+                "Ətraflı kömək üçün server administratoruna müraciət edin."
             ),
         )
         return
@@ -1289,13 +1333,7 @@ async def poll(ctx, *, text: str):
         await msg.add_reaction(emojis[i])
 
 
-# ==================== TEMPVOICE (ŞƏXSİ SƏS OTAĞI) PREFIX ƏHRAMLARI ====================
-
-@bot.command(name="komandalar")
-async def komandalar(ctx):
-    await ctx.send("Komandalar: warn, warnings, warnlar, delwarn, clearwarn, sil, mute, unmute, kick, ban, unban, userinfo, serverinfo, avatar, poll, adminkomandalar, ilis, sorus")
-
-
+# ==================== ADMIN COMMAND GUIDE ====================
 @bot.command(name="adminkomandalar", aliases=["adminhelp"])
 @commands.has_permissions(administrator=True)
 async def adminkomandalar(ctx, command_name: str = None):
@@ -1406,6 +1444,9 @@ async def adminkomandalar(ctx, command_name: str = None):
             ),
         },
     }
+
+    for temporarily_disabled_command in ("warn", "warnings", "warnlar", "delwarn", "clearwarn"):
+        guides.pop(temporarily_disabled_command, None)
 
     if not command_name:
         available = ", ".join(f"`{name}`" for name in guides)
@@ -1736,11 +1777,6 @@ async def slash_clearwarn(interaction: discord.Interaction, member: discord.Memb
         await interaction.response.send_message(f"❌ {member.mention} üçün silinəcək aktiv xəbərdarlıq tapılmadı.", ephemeral=True)
 
 
-@bot.tree.command(name="komandalar", description="Botun aktiv komandalarinin siyahisi")
-async def slash_komandalar(interaction: discord.Interaction):
-    await interaction.response.send_message("Komandalar: warn, warnings, warnlar, delwarn, clearwarn, sil, mute, unmute, kick, ban, unban, userinfo, serverinfo, avatar, poll, ilis, sorus")
-
-
 @bot.tree.command(name="sorus", description="Süni İntellektə (Gemini AI) istənilən sualı verin.")
 @app_commands.describe(sual="Süni İntellektə verəcəyiniz sual və ya mövzu")
 async def slash_sorus(interaction: discord.Interaction, sual: str):
@@ -1850,6 +1886,14 @@ async def slash_ilis(interaction: discord.Interaction, istifadeci: discord.Membe
     await interaction.followup.send(roast)
 
 
+# Temporarily deactivate warning, AI chat, and AI roast entry points. Warning
+# records and handlers stay in place so these features can be restored later.
+for disabled_prefix_command in ("warn", "warnings", "warnlar", "delwarn", "clearwarn", "ilis"):
+    bot.remove_command(disabled_prefix_command)
+
+for disabled_slash_command in ("warn", "warnings", "warnlar", "delwarn", "clearwarn", "sorus", "ilis"):
+    bot.tree.remove_command(disabled_slash_command)
+
 
 async def handle_ping(request):
     # Render/UptimeRobot üçün keep-alive endpoint
@@ -1892,7 +1936,7 @@ async def start_web_server():
         if not t_file.exists():
             logger.warning(f"[Admin Panel] Vacib sablon fayli tapilmadi: {t_file}")
 
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "127.0.0.1")
     site = web.TCPSite(runner, host, port)
     try:
         await site.start()

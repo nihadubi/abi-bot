@@ -1,5 +1,9 @@
 .env
 voice_stats.db
+abi_bot.db
+voice_stats.db-*
+abi_bot.db-*
+abi_bot.db.migrating*
 __pycache__/
 *.pyc
 .env

@@ -10,7 +10,7 @@ import re
 import secrets
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -139,16 +139,20 @@ def _permission_overwrite_json(channel, guild):
 
 
 def get_admin_password_hash() -> str:
-    """Gets the required SHA-256 hash of ADMIN_PASSWORD."""
+    """Derive a slow password verifier for the configured admin password."""
     raw_pwd = os.getenv("ADMIN_PASSWORD", "").strip()
     if not raw_pwd or raw_pwd == "admin123":
         raise RuntimeError("ADMIN_PASSWORD təhlükəsiz parol kimi təyin edilməlidir.")
-    return hashlib.sha256(raw_pwd.encode("utf-8")).hexdigest()
+    return hashlib.pbkdf2_hmac(
+        "sha256", raw_pwd.encode("utf-8"), b"abi-admin-panel-password-v1", 600_000
+    ).hex()
 
 
 def verify_password(provided_password: str) -> bool:
     expected_hash = get_admin_password_hash()
-    provided_hash = hashlib.sha256(provided_password.strip().encode("utf-8")).hexdigest()
+    provided_hash = hashlib.pbkdf2_hmac(
+        "sha256", provided_password.strip().encode("utf-8"), b"abi-admin-panel-password-v1", 600_000
+    ).hex()
     return hmac.compare_digest(expected_hash, provided_hash)
 
 
@@ -233,16 +237,23 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             max_age=SESSION_MAX_AGE_SECONDS,
             httponly=True,
             samesite="Lax",
-            secure=False  # Set to True if strictly serving over HTTPS
+            secure=os.getenv("COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes", "on"}
         )
         return resp
 
-    # 3. Logout Action (POST or GET)
+    # 3. Logout Action (CSRF-protected POST only)
     async def handle_logout(request: web.Request):
+        try:
+            data = await request.json()
+            csrf_token = str(data.get("csrf_token", ""))
+        except (TypeError, ValueError):
+            return web.json_response({"success": False, "error": "Sorğu məlumatı düzgün deyil."}, status=400)
+        if not verify_csrf(request, csrf_token):
+            return web.json_response({"success": False, "error": "CSRF yoxlaması uğursuz oldu."}, status=403)
         token = request.cookies.get(COOKIE_NAME)
         if token in ACTIVE_SESSIONS:
             ACTIVE_SESSIONS.pop(token, None)
-        resp = web.HTTPFound("/admin/login")
+        resp = web.json_response({"success": True, "redirect": "/admin/login"})
         resp.del_cookie(COOKIE_NAME)
         return resp
 
@@ -329,6 +340,64 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             "success": True,
             "guilds": [{"id": str(guild.id), "name": guild.name} for guild in guilds],
         })
+
+    @require_auth
+    async def handle_api_command_catalog(request: web.Request):
+        prefix_purposes = {
+            "sil": ("Kanaldakı son mesajları toplu silir.", "Mesajları idarə et"),
+            "mute": ("Üzvə göstərilən müddətə Discord timeout-u verir.", "Üzvləri moderasiya et"),
+            "unmute": ("Üzvün aktiv timeout-unu qaldırır.", "Üzvləri moderasiya et"),
+            "kick": ("Üzvü serverdən çıxarır.", "Üzvləri at"),
+            "ban": ("Üzvü serverdən ban edir.", "Üzvləri ban et"),
+            "unban": ("Discord ID-si ilə üzvün banını açır.", "Üzvləri ban et"),
+            "userinfo": ("Üzvün profil və server məlumatlarını göstərir.", "Hər kəs"),
+            "serverinfo": ("Serverin əsas məlumatlarını göstərir.", "Hər kəs"),
+            "avatar": ("Üzvün avatarını böyük ölçüdə göstərir.", "Hər kəs"),
+            "poll": ("Mesajda reaksiyalarla səsvermə yaradır.", "Mesajları idarə et"),
+            "adminkomandalar": ("Administrator əmrlərinin izahını göstərir.", "Administrator"),
+        }
+        slash_permissions = {
+            "sil": "Mesajları idarə et",
+            "kick": "Üzvləri at",
+            "ban": "Üzvləri ban et",
+            "mute": "Üzvləri moderasiya et",
+            "unmute": "Üzvləri moderasiya et",
+        }
+        commands_list = []
+        for command in sorted(bot.commands, key=lambda item: item.name.casefold()):
+            if command.hidden:
+                continue
+            purpose, permission = prefix_purposes.get(
+                command.name, (command.help or "Əmr haqqında izah əlavə edilməyib.", "Əmr icazələrinə baxın"))
+            usage = f"abi {command.qualified_name}"
+            if command.signature:
+                usage += f" {command.signature}"
+            commands_list.append({
+                "type": "Prefiks",
+                "name": command.qualified_name,
+                "usage": usage,
+                "aliases": list(command.aliases),
+                "purpose": purpose,
+                "permission": permission,
+            })
+
+        for command in sorted(bot.tree.get_commands(), key=lambda item: item.name.casefold()):
+            parameters = []
+            for parameter in getattr(command, "parameters", ()):
+                parameters.append(f"<{parameter.name}>" if parameter.required else f"[{parameter.name}]")
+            usage = "/" + command.qualified_name
+            if parameters:
+                usage += " " + " ".join(parameters)
+            commands_list.append({
+                "type": "Slash",
+                "name": command.qualified_name,
+                "usage": usage,
+                "aliases": [],
+                "purpose": command.description or "Əmr haqqında izah əlavə edilməyib.",
+                "permission": slash_permissions.get(command.name, "Hər kəs"),
+            })
+
+        return web.json_response({"success": True, "commands": commands_list})
 
     @require_auth
     async def handle_api_bots(request: web.Request):
@@ -543,7 +612,7 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             return web.json_response({"success": False, "error": "Sorğu məlumatı düzgün deyil."}, status=400)
         if not verify_csrf(request, csrf_token):
             return web.json_response({"success": False, "error": "CSRF yoxlaması uğursuz oldu."}, status=403)
-        if action not in {"warn", "timeout", "untimeout", "kick", "ban", "unban"} or guild_id <= 0 or user_id <= 0:
+        if action not in {"timeout", "untimeout", "kick", "ban", "unban"} or guild_id <= 0 or user_id <= 0:
             return web.json_response({"success": False, "error": "Əməliyyat və ya istifadəçi ID-si düzgün deyil."}, status=400)
         if not bot.is_ready():
             return web.json_response({"success": False, "error": "Discord botu hazır deyil."}, status=503)
@@ -677,7 +746,9 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
                 channels.append({"id": str(channel.id), "name": channel.name,
                                  "category": channel.category.name if channel.category else ""})
         return web.json_response({"success": True,
-            "events": [{**item, **saved.get(item["key"], {"enabled": True, "channel_id": None})} for item in LOG_EVENTS],
+            "events": [{**item, "enabled": saved.get(item["key"], {}).get("enabled", True),
+                        "channel_id": str(saved[item["key"]]["channel_id"]) if saved.get(item["key"], {}).get("channel_id") else None}
+                       for item in LOG_EVENTS],
             "channels": channels})
 
     @require_auth
@@ -1281,7 +1352,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     # Register Routes
     app.router.add_get("/admin/login", handle_login_page)
     app.router.add_post("/admin/login", handle_login_action)
-    app.router.add_get("/admin/logout", handle_logout)
     app.router.add_post("/admin/logout", handle_logout)
 
     app.router.add_get("/admin", handle_admin_dashboard)
@@ -1295,8 +1365,8 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     app.router.add_get("/admin/api/moderation/member", handle_api_moderation_member)
     app.router.add_get("/admin/api/moderation/roles", handle_api_moderation_roles)
     app.router.add_post("/admin/api/moderation/roles", handle_api_moderation_role_action)
-    app.router.add_get("/admin/api/moderation/warnings", handle_api_moderation_warnings)
     app.router.add_post("/admin/api/moderation/action", handle_api_moderation_action)
+    app.router.add_get("/admin/api/commands", handle_api_command_catalog)
     app.router.add_get("/admin/api/channels", handle_api_channels)
     app.router.add_get("/admin/api/logs/settings", handle_api_log_settings)
     app.router.add_post("/admin/api/logs/settings", handle_api_save_log_settings)

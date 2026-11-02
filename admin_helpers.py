@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import sqlite3
+import socket
 import time
 import urllib.parse
 from datetime import datetime, timezone
@@ -37,6 +38,7 @@ LOGIN_WINDOW_SECONDS = 300  # 5 minutes lockout window
 # Active admin sessions: session_token -> {"created_at": float, "csrf_token": str}
 ACTIVE_SESSIONS: Dict[str, dict] = {}
 SESSION_MAX_AGE_SECONDS = 7 * 24 * 3600  # 7 days
+MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
 
 
 def clean_login_attempts(ip: str) -> List[float]:
@@ -62,14 +64,34 @@ def reset_login_attempts(ip: str):
 
 
 def get_client_ip(request: web.Request) -> str:
-    # Check X-Forwarded-For if behind reverse proxy
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     peername = request.transport.get_extra_info("peername") if request.transport else None
-    if peername:
-        return peername[0]
-    return "127.0.0.1"
+    peer_ip = peername[0] if peername else request.remote
+    if not peer_ip:
+        return "127.0.0.1"
+
+    # Forwarded headers are client-controlled unless the direct peer is a configured proxy.
+    raw_trusted = os.getenv("TRUSTED_PROXY_CIDRS", "")
+    try:
+        peer = ipaddress.ip_address(peer_ip)
+        trusted = [ipaddress.ip_network(item.strip(), strict=False)
+                   for item in raw_trusted.split(",") if item.strip()]
+    except ValueError:
+        return peer_ip
+    if not any(peer in network for network in trusted):
+        return str(peer)
+
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    chain = []
+    for value in forwarded.split(","):
+        try:
+            chain.append(ipaddress.ip_address(value.strip()))
+        except ValueError:
+            continue
+    # Walk from the proxy toward the client; ignore trusted proxy hops.
+    for address in reversed(chain):
+        if not any(address in network for network in trusted):
+            return str(address)
+    return str(peer)
 
 
 # --- SSRF Protection ---
@@ -83,12 +105,12 @@ def is_safe_url(url: str) -> bool:
             return False
 
         # Disallow loopback, private IP addresses
-        if hostname.lower() in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        if hostname.lower().rstrip(".") == "localhost":
             return False
 
         try:
             ip = ipaddress.ip_address(hostname)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            if not ip.is_global:
                 return False
         except ValueError:
             # Domain name (e.g. i.imgur.com)
@@ -99,43 +121,75 @@ def is_safe_url(url: str) -> bool:
         return False
 
 
+class _PublicOnlyResolver(aiohttp.abc.AbstractResolver):
+    """Resolve hosts only to globally routable IP addresses, including on redirects."""
+    def __init__(self):
+        self._resolver = aiohttp.resolver.DefaultResolver()
+
+    async def resolve(self, host, port=0, family=socket.AF_INET):
+        records = await self._resolver.resolve(host, port, family)
+        if not records:
+            raise OSError("Host adı IP ünvanına çevrilmədi.")
+        for record in records:
+            try:
+                address = ipaddress.ip_address(record["host"])
+            except ValueError as exc:
+                raise OSError("DNS cavabında etibarsız IP ünvanı var.") from exc
+            if not address.is_global:
+                raise OSError("Daxili və ya ictimai olmayan IP ünvanına sorğu bloklandı.")
+        return records
+
+    async def close(self):
+        await self._resolver.close()
+
+
 async def safe_fetch_image_url(session: aiohttp.ClientSession, url: str) -> Tuple[Optional[bytes], Optional[str], Optional[str]]:
-    """Safely fetches image bytes while preventing SSRF and checking content headers."""
+    """Fetch an image with DNS, redirect, and response-size SSRF protections."""
     if not is_safe_url(url):
         return None, None, "Təhlükəsizlik xətası: Daxil edilən şəkil URL-i qadağandır və ya daxili şəbəkəyə aiddir."
 
     try:
-        async with session.get(
-            url,
-            allow_redirects=True,
-            max_redirects=3,
-            timeout=aiohttp.ClientTimeout(total=15, connect=5),
-            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AbiBotAdmin/1.0"}
-        ) as resp:
-            if resp.status != 200:
-                return None, None, f"Şəkil yüklənmədi (HTTP Status: {resp.status})"
+        timeout = aiohttp.ClientTimeout(total=15, connect=5)
+        connector = aiohttp.TCPConnector(resolver=_PublicOnlyResolver())
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=False,
+                                         headers={"User-Agent": "Mozilla/5.0 AbiBotAdmin/1.0"}) as safe_session:
+            current_url = url
+            for redirect_count in range(4):
+                if not is_safe_url(current_url):
+                    return None, None, "Təhlükəsizlik xətası: yönləndirilən URL qadağandır."
+                async with safe_session.get(current_url, allow_redirects=False) as resp:
+                    if resp.status in {301, 302, 303, 307, 308}:
+                        location = resp.headers.get("Location")
+                        if not location or redirect_count == 3:
+                            return None, None, "Şəkil üçün yönləndirmə sayı həddi keçdi."
+                        current_url = urllib.parse.urljoin(str(resp.url), location)
+                        continue
+                    if resp.status != 200:
+                        return None, None, f"Şəkil yüklənmədi (HTTP Status: {resp.status})"
 
-            # Final URL check after redirects
-            if not is_safe_url(str(resp.url)):
-                return None, None, "Təhlükəsizlik xətası: Yönləndirilən URL daxili şəbəkəyə aiddir."
+                    content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
+                    final_url = str(resp.url)
+                    path = urllib.parse.urlparse(final_url).path.lower()
+                    ext = Path(path).suffix
+                    if content_type not in ALLOWED_MIME_TYPES and ext not in ALLOWED_IMAGE_EXTS:
+                        return None, None, f"Dəstəklənməyən şəkil formatı ({content_type or 'naməlum'}). Yalnız PNG, JPG, WEBP və GIF dəstəklənir."
 
-            content_type = resp.headers.get("Content-Type", "").split(";")[0].strip().lower()
-            if content_type not in ALLOWED_MIME_TYPES:
-                # Also check file extension in path
-                path = urllib.parse.urlparse(str(resp.url)).path.lower()
-                ext = Path(path).suffix
-                if ext not in ALLOWED_IMAGE_EXTS:
-                    return None, None, f"Dəstəklənməyən şəkil formatı ({content_type or 'naməlum'}). Yalnız PNG, JPG, WEBP və GIF dəstəklənir."
-
-            data = await resp.read()
-            # Determine filename
-            url_path = urllib.parse.urlparse(str(resp.url)).path
-            filename = Path(url_path).name or "image.png"
-            if "." not in filename:
-                ext = ALLOWED_MIME_TYPES.get(content_type, ".png")
-                filename = f"image{ext}"
-
-            return data, filename, None
+                    content_length = resp.content_length
+                    if content_length is not None and content_length > MAX_REMOTE_IMAGE_BYTES:
+                        return None, None, "Şəkil 20 MB ölçü həddini keçir."
+                    chunks = []
+                    total = 0
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        total += len(chunk)
+                        if total > MAX_REMOTE_IMAGE_BYTES:
+                            return None, None, "Şəkil 20 MB ölçü həddini keçir."
+                        chunks.append(chunk)
+                    data = b"".join(chunks)
+                    filename = Path(urllib.parse.urlparse(final_url).path).name or "image.png"
+                    if "." not in filename:
+                        filename = f"image{ALLOWED_MIME_TYPES.get(content_type, '.png')}"
+                    return data, filename, None
+        return None, None, "Şəkil yüklənmədi."
     except asyncio.TimeoutError:
         return None, None, "Şəkil yüklənərkən vaxt bitdi (Timeout)."
     except Exception as e:

@@ -1,6 +1,6 @@
 ﻿# Abi Discord Bot
 
-Discord bot for voice activity tracking, XP and levels, moderation, anti-spam, temporary voice channels, welcome cards, and an authenticated web admin panel.
+Discord bot for moderation, anti-spam, voice event logging, AI replies, and an authenticated web admin panel with post scheduling and server controls.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables AI features. Set `GUILD_ID` if you want slash commands synced quickly to a specific server. The web server uses `HOST=0.0.0.0` and `PORT=8080` by default; set these to suit your host.
+Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables AI features. Set `GUILD_ID` if you want slash commands synced quickly to a specific server. The web server binds to `HOST=127.0.0.1` and `PORT=8080` by default. For a reverse proxy on the same host, keep the bot bound to localhost; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
 
 Never commit `.env` or the SQLite database. If a token or key has been exposed, rotate it.
 
@@ -25,7 +25,7 @@ Never commit `.env` or the SQLite database. If a token or key has been exposed, 
 python bot.py
 ```
 
-The admin panel is available at `http://localhost:8080/admin` on the same machine. If the bot runs on a remote host, put it behind HTTPS with a reverse proxy and restrict direct access to its port. The panel provides channel posting, scheduled posts, post history, moderation controls, and per-server event logging. Discord permissions and role hierarchy still apply.
+The admin panel is available at `http://localhost:8080/admin` on the same machine. If the bot runs on a remote host, put it behind HTTPS with a reverse proxy and restrict direct access to its port. Set `HOST=0.0.0.0` only when the deployment requires external binding. The panel provides channel posting, scheduled posts, post history, moderation controls, and per-server event logging. Discord permissions and role hierarchy still apply.
 
 ### Event logging setup
 

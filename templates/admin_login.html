@@ -1,40 +1,170 @@
 <!doctype html>
 <html lang="az">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Abi Admin — Giriş</title>
-  <style>
-    :root { color-scheme: dark; font: 16px system-ui, sans-serif; }
-    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #0b1020; color: #eef2ff; }
-    main { box-sizing: border-box; width: min(92vw, 390px); padding: 32px; border: 1px solid #29334d; border-radius: 16px; background: #131b2e; box-shadow: 0 24px 80px #0006; }
-    h1 { margin: 0 0 8px; font-size: 1.5rem; } p { margin: 0 0 24px; color: #aab5cc; }
-    label { display: block; margin-bottom: 8px; font-weight: 600; }
-    input, button { box-sizing: border-box; width: 100%; padding: 12px 14px; border-radius: 9px; font: inherit; }
-    input { border: 1px solid #394662; background: #0b1020; color: inherit; }
-    button { margin-top: 14px; border: 0; background: #6578ed; color: white; font-weight: 700; cursor: pointer; }
-    button:disabled { opacity: .65; cursor: wait; }
-    #message { min-height: 1.4em; margin-top: 14px; color: #ff9b9b; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>abi — Giriş</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0a0b0e;
+    --panel:#141620;
+    --panel-2:#191c27;
+    --border:#272b36;
+    --text:#edeff3;
+    --muted:#8890a0;
+    --accent:#8b6cff;
+    --accent-dim:rgba(139,108,255,.14);
+    --danger:#ff6b70;
+    --ok:#4fd98a;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:grid; place-items:center;
+    background:
+      radial-gradient(900px 480px at 15% -10%, rgba(139,108,255,.10), transparent 60%),
+      radial-gradient(700px 420px at 100% 110%, rgba(79,217,138,.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', ui-sans-serif, system-ui, sans-serif;
+    padding:24px;
+  }
+  .frame{
+    width:min(92vw, 404px);
+    border:1px solid var(--border);
+    border-radius:14px;
+    background:var(--panel);
+    box-shadow:0 40px 100px -30px rgba(0,0,0,.7);
+    overflow:hidden;
+  }
+  .frame-bar{
+    display:flex; align-items:center; gap:8px;
+    padding:12px 16px;
+    background:var(--panel-2);
+    border-bottom:1px solid var(--border);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:.02em;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:#3a3f4c;}
+  .dot.a{background:#ff6b70;}
+  .dot.b{background:#f2b84b;}
+  .dot.c{background:#4fd98a;}
+  .frame-bar span.path{margin-left:4px;}
+  .frame-body{padding:30px 28px 28px;}
+  .mark{
+    width:38px; height:38px; border-radius:10px;
+    background:linear-gradient(135deg, var(--accent), #5a3fd9);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:17px; color:#fff;
+    margin-bottom:18px;
+    box-shadow:0 10px 24px -8px rgba(139,108,255,.55);
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600; font-size:1.3rem; margin:0 0 6px; letter-spacing:-.01em;
+  }
+  p.lede{ margin:0 0 26px; color:var(--muted); font-size:.875rem; line-height:1.5; }
+  label{
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:.72rem; font-weight:600; color:var(--muted);
+    margin-bottom:7px; font-family:'IBM Plex Mono', monospace; letter-spacing:.02em;
+  }
+  .field{ position:relative; margin-bottom:4px; }
+  input{
+    box-sizing:border-box; width:100%; padding:12px 42px 12px 14px;
+    border-radius:9px; border:1px solid var(--border); background:#0d0e13;
+    color:var(--text); font:inherit; font-size:.92rem;
+  }
+  input:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+  .eye{
+    position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    background:none; border:0; color:var(--muted); cursor:pointer; padding:6px;
+    display:flex;
+  }
+  .eye:hover{ color:var(--text); }
+  button#submit{
+    width:100%; margin-top:18px; padding:12px 14px; border:0; border-radius:9px;
+    background:var(--accent); color:#fff; font-weight:600; font-size:.92rem;
+    cursor:pointer; transition:background .15s ease, transform .1s ease;
+    font-family:'Inter', sans-serif;
+  }
+  button#submit:hover{ background:#7a56ff; }
+  button#submit:active{ transform:scale(.99); }
+  button#submit:disabled{ opacity:.6; cursor:wait; }
+  #message{
+    min-height:1.3em; margin-top:14px; font-size:.8rem; color:var(--danger);
+    display:flex; align-items:center; gap:6px;
+  }
+  .foot{
+    margin-top:22px; padding-top:16px; border-top:1px solid var(--border);
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:#555a68;
+    display:flex; justify-content:space-between;
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .frame{ animation: rise .4s ease both; }
+    @keyframes rise{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  }
+</style>
 </head>
 <body>
-  <main>
-    <h1>Admin panelə giriş</h1>
-    <p>İdarəetmə panelini açmaq üçün admin şifrəsini daxil edin.</p>
-    <form id="login-form">
-      <label for="password">Şifrə</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-      <button id="submit" type="submit">Daxil ol</button>
-      <div id="message" role="alert" aria-live="polite"></div>
-    </form>
-  </main>
+  <div class="frame">
+    <div class="frame-bar">
+      <span class="dot a"></span><span class="dot b"></span><span class="dot c"></span>
+      <span class="path">abi · /admin/login</span>
+    </div>
+    <div class="frame-body">
+      <div class="mark">a</div>
+      <h1>Admin panelə giriş</h1>
+      <p class="lede">İdarəetmə panelini açmaq üçün admin şifrəsini daxil edin.</p>
+      <form id="login-form">
+        <label for="password">Şifrə <span id="capsHint" style="display:none;color:#f2b84b;">Caps Lock aktivdir</span></label>
+        <div class="field">
+          <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+          <button type="button" class="eye" id="toggleEye" aria-label="Şifrəni göstər/gizlət">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <button id="submit" type="submit">Daxil ol</button>
+        <div id="message" role="alert" aria-live="polite"></div>
+      </form>
+      <div class="foot">
+        <span>abi-bot</span>
+        <span id="clock">—</span>
+      </div>
+    </div>
+  </div>
   <script>
     const form = document.getElementById('login-form');
     const button = document.getElementById('submit');
     const message = document.getElementById('message');
+    const pwd = document.getElementById('password');
+    const eye = document.getElementById('toggleEye');
+    const capsHint = document.getElementById('capsHint');
+
+    eye.addEventListener('click', () => {
+      pwd.type = pwd.type === 'password' ? 'text' : 'password';
+    });
+    pwd.addEventListener('keyup', (e) => {
+      if (typeof e.getModifierState === 'function') {
+        capsHint.style.display = e.getModifierState('CapsLock') ? 'inline' : 'none';
+      }
+    });
+
+    function tick() {
+      const el = document.getElementById('clock');
+      if (el) el.textContent = new Date().toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' });
+    }
+    tick(); setInterval(tick, 30000);
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       button.disabled = true;
+      button.textContent = 'Yoxlanılır…';
       message.textContent = '';
       try {
         const response = await fetch('/admin/login', {
@@ -45,10 +175,12 @@
         });
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error || 'Giriş alınmadı.');
+        button.textContent = 'Yönləndirilir…';
         window.location.assign(result.redirect || '/admin');
       } catch (error) {
         message.textContent = error.message || 'Serverlə əlaqə qurmaq mümkün olmadı.';
         button.disabled = false;
+        button.textContent = 'Daxil ol';
       }
     });
   </script>
