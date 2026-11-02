@@ -307,6 +307,20 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
     # Qısa dəyərlər sətir kimi, uzunlar ayrıca sahə kimi
     long_fields = []
     for key, raw in details.items():
+        if event_key == "message_bulk_delete" and key == "Mesajlar" and isinstance(raw, (list, tuple)):
+            for position, message in enumerate(raw, 1):
+                if not isinstance(message, dict):
+                    continue
+                index = message.get("_index", position)
+                author = str(message.get("müəllif") or "Müəllif məlum deyil")
+                content = str(message.get("mətn") or "(boş mətn)").strip()
+                attachments = message.get("qoşmalar") or []
+                if attachments:
+                    content += "\n\nQoşmalar:\n" + "\n".join(str(item) for item in attachments)
+                if len(content) > 900:
+                    content = content[:897].rstrip() + "..."
+                long_fields.append((f"{int(index):02d} · {author}"[:256], content or "(boş mətn)"))
+            continue
         value = _fmt_value(raw)
         if value.strip().lower() in _EMPTY_VALUES:
             continue
@@ -331,6 +345,8 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
     remaining = max(0, 5400 - len(embed.description or ""))
     for label, value in long_fields:
         if value.startswith("•"):
+            shown = value
+        elif event_key == "message_bulk_delete":
             shown = value
         elif len(value) > 120 or "\n" in value:
             shown = f"```{value[:900]}```"
@@ -380,9 +396,23 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
         bot_user = getattr(bot, "user", None)
         bot_avatar_url = _avatar_url(bot_user)
         guild_icon_url = _guild_icon_url(guild)
-        embed = make_embed(event_key, title, actor, target, channel, details, created_at,
-                           bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
-        await destination.send(embed=embed)
+        if event_key == "message_bulk_delete" and isinstance((details or {}).get("Mesajlar"), list):
+            messages = [dict(message, _index=index) for index, message in enumerate(details["Mesajlar"], 1)]
+            page_size = 5
+            batches = [messages[offset:offset + page_size] for offset in range(0, len(messages), page_size)] or [[]]
+            for page_number, batch in enumerate(batches, 1):
+                start = (page_number - 1) * page_size + 1
+                end = start + len(batch) - 1
+                page_details = dict(details)
+                page_details["Mesajlar"] = batch
+                page_title = title if len(batches) == 1 else f"{title} · {start}–{end}/{len(messages)}"
+                embed = make_embed(event_key, page_title, actor, target, channel, page_details, created_at,
+                                   bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
+                await destination.send(embed=embed)
+        else:
+            embed = make_embed(event_key, title, actor, target, channel, details, created_at,
+                               bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
+            await destination.send(embed=embed)
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("Log kanala göndərilmədi | guild=%s event=%s channel=%s: %s",
                        guild.id, event_key, destination_id, exc)

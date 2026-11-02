@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 from database import Database
 import graphics
+from logging_system import emit_log, format_audit_changes, invite_snapshot
 
 
 
@@ -657,6 +658,37 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
                    created_at=after.edited_at)
 
 
+def deleted_message_text(message: discord.Message) -> str:
+    content = (message.content or "").strip()
+    if content:
+        return content
+
+    embed_parts = []
+    for embed in message.embeds:
+        if embed.title:
+            embed_parts.append(embed.title)
+        if embed.description:
+            embed_parts.append(embed.description)
+        for field in embed.fields:
+            embed_parts.append(f"{field.name}: {field.value}")
+        if embed.url:
+            embed_parts.append(embed.url)
+        if embed.image and embed.image.url:
+            embed_parts.append(f"Şəkil: {embed.image.url}")
+        if embed.thumbnail and embed.thumbnail.url:
+            embed_parts.append(f"Şəkil: {embed.thumbnail.url}")
+    if embed_parts:
+        return "Embed məzmunu:\n" + "\n".join(embed_parts)[:1800]
+    if message.attachments:
+        return "Mətn yoxdur — mesajda fayl qoşması var."
+    if message.stickers:
+        return "Mətn yoxdur — stiker: " + ", ".join(sticker.name for sticker in message.stickers)
+    poll_question = getattr(getattr(getattr(message, "poll", None), "question", None), "text", None)
+    if poll_question:
+        return f"Mətn yoxdur — sorğu: {poll_question}"
+    return "Mətn hissəsi boşdur və ya bot üçün əlçatan deyil."
+
+
 @bot.event
 async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     if payload.guild_id is None:
@@ -669,7 +701,7 @@ async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
     channel = guild.get_channel(payload.channel_id)
     attachments = [f"{item.filename}: {item.url}" for item in message.attachments] if message else []
     details = {"Mesaj ID": str(payload.message_id),
-               "Mətn": message.content if message and message.content else ("(boş mətn)" if message else "Cache-də yoxdur"),
+               "Mətn": deleted_message_text(message) if message else "Cache-də yoxdur",
                "Qoşmalar": attachments or "Yoxdur"}
     await emit_log(bot, db, guild, "message_delete", "Mesaj silindi", target=author,
                    channel=channel, details=details)
@@ -683,12 +715,13 @@ async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent)
     if guild is None:
         return
     channel = guild.get_channel(payload.channel_id)
-    cached = list(payload.cached_messages)
+    cached = sorted(payload.cached_messages, key=lambda message: message.id)
     details = {"Silinən mesaj sayı": str(len(payload.message_ids)),
                "Mesajlar": [{"id": str(message.id), "müəllif": str(message.author),
-                             "mətn": message.content, "qoşmalar": [f"{item.filename}: {item.url}" for item in message.attachments]}
-                            for message in cached[:20]],
-               "Qeyd": f"Cache-dən {len(cached)} mesaj detallı oxundu; limitə görə maksimum ilk 20-si göstərilir."}
+                             "mətn": deleted_message_text(message),
+                             "qoşmalar": [f"{item.filename}: {item.url}" for item in message.attachments]}
+                            for message in cached],
+               "Qeyd": f"Keşdən {len(cached)} / {len(payload.message_ids)} mesajın detalları oxundu; keşdə olmayan məzmun əlçatan deyil."}
     await emit_log(bot, db, guild, "message_bulk_delete", "Mesajlar toplu silindi",
                    channel=channel, details=details)
 
