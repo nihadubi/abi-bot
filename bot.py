@@ -2042,7 +2042,9 @@ async def start_web_server():
         if not t_file.exists():
             logger.warning(f"[Admin Panel] Vacib sablon fayli tapilmadi: {t_file}")
 
-    host = os.getenv("HOST", "127.0.0.1")
+    # Managed hosts such as Render route traffic to the container's public
+    # interface, so listen on all interfaces unless explicitly overridden.
+    host = os.getenv("HOST", "0.0.0.0")
     site = web.TCPSite(runner, host, port)
     try:
         await site.start()

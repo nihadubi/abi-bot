@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables image descriptions. The web server binds to `HOST=127.0.0.1` and `PORT=8080` by default. For a reverse proxy on the same host, keep the bot bound to localhost; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
+Copy `.env.example` to `.env` and fill in at least `TOKEN` and a strong `ADMIN_PASSWORD`. `GEMINI_API_KEY` is optional and enables image descriptions. The web server binds to `HOST=0.0.0.0` and `PORT=8080` by default so managed hosts such as Render can reach it; Render supplies `PORT` automatically. For a reverse proxy on the same host, set `HOST=127.0.0.1`; set `COOKIE_SECURE=true` when serving the panel over HTTPS and set `TRUSTED_PROXY_CIDRS` only to the proxy's IP/CIDR.
 
 Never commit `.env` or the SQLite database. If a token or key has been exposed, rotate it.
 
@@ -25,7 +25,7 @@ Never commit `.env` or the SQLite database. If a token or key has been exposed, 
 python bot.py
 ```
 
-The admin panel is available at `http://localhost:8080/admin` on the same machine. If the bot runs on a remote host, put it behind HTTPS with a reverse proxy and restrict direct access to its port. Set `HOST=0.0.0.0` only when the deployment requires external binding. The panel provides channel posting, scheduled posts, post history, moderation controls, and per-server event logging. Discord permissions and role hierarchy still apply.
+The admin panel is available at `http://localhost:8080/admin` on the same machine. If the bot runs on a remote host, put it behind HTTPS with a reverse proxy and restrict direct access to its port. The panel provides channel posting, scheduled posts, post history, moderation controls, and per-server event logging. Discord permissions and role hierarchy still apply.
 
 ### Event logging setup
 
