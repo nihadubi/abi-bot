@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sqlite3
+from types import SimpleNamespace
 from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -16,7 +17,7 @@ from dotenv import load_dotenv
 
 from database import Database
 import graphics
-from logging_system import emit_log, format_audit_changes, invite_snapshot
+from logging_system import emit_log, invite_snapshot
 
 
 
@@ -197,10 +198,10 @@ COMMAND_GUIDANCE = {
     "clearwarn": ("`abi clearwarn @istifadəçi`", "`abi clearwarn @Nihad`"),
     "sil": ("`abi sil [say]`", "`abi sil 25`"),
     "temizle": ("`abi sil [say]`", "`abi sil 25`"),
-    "mute": ("`abi mute @istifadəçi [dəqiqə] [səbəb]`", "`abi mute @Nihad 30 Təhqir`"),
-    "unmute": ("`abi unmute @istifadəçi`", "`abi unmute @Nihad`"),
-    "kick": ("`abi kick @istifadəçi [səbəb]`", "`abi kick @Nihad Qaydaları pozdu`"),
-    "ban": ("`abi ban @istifadəçi [səbəb]`", "`abi ban @Nihad Təkrar qayda pozuntusu`"),
+    "mute": ("`abi mute @istifadəçi|ID [dəqiqə] [səbəb]`", "`abi mute 123456789012345678 30 Təhqir`"),
+    "unmute": ("`abi unmute @istifadəçi|ID`", "`abi unmute 123456789012345678`"),
+    "kick": ("`abi kick @istifadəçi|ID [səbəb]`", "`abi kick 123456789012345678 Qaydaları pozdu`"),
+    "ban": ("`abi ban @istifadəçi|ID [səbəb]`", "`abi ban 123456789012345678 Təkrar qayda pozuntusu`"),
     "unban": ("`abi unban [istifadəçi ID] [səbəb]`", "`abi unban 123456789012345678 Səhv ban`"),
     "sifirla": ("`abi sifirla @istifadəçi`", "`abi sifirla @Nihad`"),
     "adminkomandalar": ("`abi adminkomandalar [əmr]`", "`abi adminkomandalar warn`"),
@@ -786,17 +787,24 @@ async def on_audit_log_entry_create(entry: discord.AuditLogEntry):
     elif action.startswith("role_"):
         event_key = {"role_create": "role_create", "role_update": "role_update", "role_delete": "role_delete"}.get(action)
         title = {"role_create": "Rol yaradıldı", "role_update": "Rol dəyişdirildi", "role_delete": "Rol silindi"}.get(action, title)
+        if action == "role_delete" and target is not None:
+            # Deleted roles may arrive as a bare Discord Object with no name.
+            # The audit log's before.name still contains the deleted role name.
+            before = getattr(getattr(entry, "changes", None), "before", None)
+            deleted_name = getattr(before, "name", None)
+            target_id = getattr(target, "id", None)
+            if deleted_name and target_id:
+                target = SimpleNamespace(
+                    id=target_id,
+                    name=deleted_name,
+                    mention=f"<@&{target_id}>",
+                )
     elif action.startswith("channel_"):
         event_key = {"channel_create": "channel_create", "channel_update": "channel_update", "channel_delete": "channel_delete"}.get(action)
         title = {"channel_create": "Kanal yaradıldı", "channel_update": "Kanal dəyişdirildi", "channel_delete": "Kanal silindi"}.get(action, title)
     elif action == "guild_update":
         event_key, title = "guild_update", "Server ayarları dəyişdirildi"
     if event_key:
-        changes = getattr(entry, "changes", None)
-        if changes:
-            formatted = format_audit_changes(changes)
-            if formatted:
-                details["Dəyişikliklər"] = formatted
         actor = entry.user or entry.guild.get_member(entry.user_id) or bot.get_user(entry.user_id)
         await emit_log(bot, db, entry.guild, event_key, title, actor=actor,
                        target=target, details=details, created_at=entry.created_at)
@@ -1142,7 +1150,11 @@ async def sil(ctx, amount: int = 10):
 
 @bot.command(name="mute")
 @commands.has_permissions(moderate_members=True)
-async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = "Səbəb göstərilməyib"):
+async def mute(ctx, member_input: str, minutes: int = 10, *, reason: str = "Səbəb göstərilməyib"):
+    member = await resolve_guild_member(ctx.guild, member_input)
+    if member is None:
+        await send_error_card(ctx, "Üzv tapılmadı", "Serverdəki üzvün mention-ını və ya Discord ID-sini yazın.")
+        return
     # İstifadəçiyə timeout tətbiq edirik
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
         await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçiyə timeout verə bilməzsən.")
@@ -1171,7 +1183,11 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
 
 @bot.command(name="unmute")
 @commands.has_permissions(moderate_members=True)
-async def unmute(ctx, member: discord.Member):
+async def unmute(ctx, member_input: str):
+    member = await resolve_guild_member(ctx.guild, member_input)
+    if member is None:
+        await send_error_card(ctx, "Üzv tapılmadı", "Serverdəki üzvün mention-ını və ya Discord ID-sini yazın.")
+        return
     # Timeout-u ləğv edirik
     try:
         await member.timeout(None, reason=f"{ctx.author} tərəfindən unmute")
@@ -1193,7 +1209,11 @@ async def unmute(ctx, member: discord.Member):
 
 @bot.command(name="kick")
 @commands.has_permissions(kick_members=True)
-async def kick(ctx, member: discord.Member, *, reason: str = "Səbəb göstərilməyib"):
+async def kick(ctx, member_input: str, *, reason: str = "Səbəb göstərilməyib"):
+    member = await resolve_guild_member(ctx.guild, member_input)
+    if member is None:
+        await send_error_card(ctx, "Üzv tapılmadı", "Serverdəki üzvün mention-ını və ya Discord ID-sini yazın.")
+        return
     # Serverdən istifadəçini kənarlaşdırırıq
     if member.top_role >= ctx.author.top_role and ctx.author.id != ctx.guild.owner_id:
         await send_error_card(ctx, "İcazə Yoxdur", "Səninlə eyni və ya daha yüksək rolda olan istifadəçini serverdən ata bilməzsən.")
@@ -1225,6 +1245,22 @@ def parse_ban_user_id(value: str):
         return None
     user_id = int(raw_id)
     return user_id if 0 < user_id < 2**64 else None
+
+
+async def resolve_guild_member(guild: discord.Guild, value):
+    """Resolve a guild member from a Member object, mention, or numeric ID."""
+    if isinstance(value, discord.Member):
+        return value
+    user_id = parse_ban_user_id(str(value))
+    if user_id is None:
+        return None
+    member = guild.get_member(user_id)
+    if member:
+        return member
+    try:
+        return await guild.fetch_member(user_id)
+    except (discord.NotFound, discord.Forbidden):
+        return None
 
 
 async def resolve_ban_target(guild: discord.Guild, user_id: int):
@@ -1639,7 +1675,15 @@ async def slash_serverinfo(interaction: discord.Interaction):
 @bot.tree.command(name="kick", description="İstifadəçini serverdən kənarlaşdırır (Kick).")
 @app_commands.checks.has_permissions(kick_members=True)
 @app_commands.describe(member="Serverdən atılacaq üzv", reason="Kick səbəbi")
-async def slash_kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Səbəb göstərilməyib"):
+async def slash_kick(interaction: discord.Interaction, member: discord.Member = None, user_id: str = None, reason: str = "Səbəb göstərilməyib"):
+    if (member is None) == (user_id is None):
+        await interaction.response.send_message("Choose a member or enter a user ID (only one).", ephemeral=True)
+        return
+    if user_id is not None:
+        member = await resolve_guild_member(interaction.guild, user_id)
+        if member is None:
+            await interaction.response.send_message("No server member found with that ID.", ephemeral=True)
+            return
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçini serverdən ata bilməzsən.", ephemeral=True)
         return
@@ -1717,7 +1761,15 @@ async def slash_ban(
 @bot.tree.command(name="mute", description="İstifadəçiyə timeout tətbiq edir (Mute).")
 @app_commands.checks.has_permissions(moderate_members=True)
 @app_commands.describe(member="Timeout veriləcək üzv", minutes="Müddət (dəqiqə ilə)", reason="Mute səbəbi")
-async def slash_mute(interaction: discord.Interaction, member: discord.Member, minutes: int = 10, reason: str = "Səbəb göstərilməyib"):
+async def slash_mute(interaction: discord.Interaction, member: discord.Member = None, user_id: str = None, minutes: int = 10, reason: str = "Səbəb göstərilməyib"):
+    if (member is None) == (user_id is None):
+        await interaction.response.send_message("Choose a member or enter a user ID (only one).", ephemeral=True)
+        return
+    if user_id is not None:
+        member = await resolve_guild_member(interaction.guild, user_id)
+        if member is None:
+            await interaction.response.send_message("No server member found with that ID.", ephemeral=True)
+            return
     if member.top_role >= interaction.user.top_role and interaction.user.id != interaction.guild.owner_id:
         await interaction.response.send_message("❌ Səninlə eyni və ya daha yüksək rolda olan istifadəçiyə timeout verə bilməzsən.", ephemeral=True)
         return
@@ -1744,7 +1796,15 @@ async def slash_mute(interaction: discord.Interaction, member: discord.Member, m
 @bot.tree.command(name="unmute", description="İstifadəçinin timeout cəzasını qaldırır.")
 @app_commands.checks.has_permissions(moderate_members=True)
 @app_commands.describe(member="Timeout-u açılacaq üzv")
-async def slash_unmute(interaction: discord.Interaction, member: discord.Member):
+async def slash_unmute(interaction: discord.Interaction, member: discord.Member = None, user_id: str = None):
+    if (member is None) == (user_id is None):
+        await interaction.response.send_message("Choose a member or enter a user ID (only one).", ephemeral=True)
+        return
+    if user_id is not None:
+        member = await resolve_guild_member(interaction.guild, user_id)
+        if member is None:
+            await interaction.response.send_message("No server member found with that ID.", ephemeral=True)
+            return
     try:
         await member.timeout(None, reason=f"{interaction.user} tərəfindən unmute")
         embed = discord.Embed(

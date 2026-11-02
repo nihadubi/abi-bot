@@ -307,6 +307,8 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
     # Qısa dəyərlər sətir kimi, uzunlar ayrıca sahə kimi
     long_fields = []
     for key, raw in details.items():
+        if str(key).strip().casefold() in {"dəyişiklik", "dəyişikliklər"}:
+            continue
         if event_key == "message_bulk_delete" and key == "Mesajlar" and isinstance(raw, (list, tuple)):
             for position, message in enumerate(raw, 1):
                 if not isinstance(message, dict):
