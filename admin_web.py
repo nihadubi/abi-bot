@@ -1369,7 +1369,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     app.router.add_get("/admin/api/commands", handle_api_command_catalog)
     app.router.add_get("/admin/api/channels", handle_api_channels)
     app.router.add_get("/admin/api/logs/settings", handle_api_log_settings)
-    app.router.add_get("/admin/api/logs/preview", handle_api_log_preview)
     app.router.add_post("/admin/api/logs/settings", handle_api_save_log_settings)
     app.router.add_get("/admin/api/logs/events", handle_api_log_events)
     app.router.add_get("/admin/api/logs/analytics", handle_api_log_analytics)
