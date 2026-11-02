@@ -702,6 +702,20 @@
           </div>
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3" id="logSummary"></div>
           <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="font-bold text-white">Log görünüşü</h3>
+                <p class="text-xs text-slate-400">Hadisə seçib logun Discord-da necə görünəcəyinə baxın. Bu preview mesaj göndərmir.</p>
+              </div>
+              <select id="logPreviewEvent" onchange="loadLogPreview()" class="px-3 py-2 text-sm min-w-56">
+                <option value="">Server seçin</option>
+              </select>
+            </div>
+            <div id="logPreview" class="rounded-xl border border-borderDark bg-[#1e1f22] p-4">
+              <p class="text-sm text-slate-500 text-center py-8">Preview üçün server seçin.</p>
+            </div>
+          </div>
+          <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
             <div class="flex items-center justify-between"><div><h3 class="font-bold text-white">Log marşrutları</h3><p class="text-xs text-slate-400">Hadisə növü üçün kanal və aktivlik seçin.</p></div><button onclick="saveLogSettings()" class="px-4 py-2 rounded-xl bg-brand hover:bg-brandHover font-semibold text-sm text-white">Sazlamaları yadda saxla</button></div>
             <div id="logSettingsGrid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"><p class="text-sm text-slate-500">Server seçin.</p></div>
           </div>
@@ -844,9 +858,88 @@
         }).join("")}</div>`).join("");
         const filter = document.getElementById("logsEventFilter");
         filter.innerHTML = '<option value="">Bütün hadisələr</option>' + data.events.map(e => `<option value="${e.key}">${escapeHtml(e.label)}</option>`).join("");
+        const previewSelect = document.getElementById("logPreviewEvent");
+        const previousPreview = previewSelect.value;
+        previewSelect.innerHTML = data.events.map(e => `<option value="${e.key}">${escapeHtml(e.label)}</option>`).join("");
+        previewSelect.value = data.events.some(e => e.key === previousPreview) ? previousPreview : "member_join";
+        await loadLogPreview();
         await loadLogsData();
       } catch (e) { box.innerHTML = `<p class="text-sm text-rose-300">${escapeHtml(e.message)}</p>`; }
     }
+    async function loadLogPreview() {
+      const guildId = document.getElementById("logsGuildSelect")?.value;
+      const eventKey = document.getElementById("logPreviewEvent")?.value;
+      const root = document.getElementById("logPreview");
+      if (!root) return;
+      if (!guildId || !eventKey) {
+        root.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Preview üçün server və hadisə seçin.</p>';
+        return;
+      }
+      root.innerHTML = '<p class="text-sm text-slate-500 text-center py-8">Preview hazırlanır...</p>';
+      try {
+        const params = new URLSearchParams({guild_id: guildId, event: eventKey});
+        const response = await fetch(`/admin/api/logs/preview?${params}`);
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          const body = (await response.text()).slice(0, 160);
+          throw new Error(`Server JSON əvəzinə xəta cavabı qaytardı (${response.status}). ${body}`);
+        }
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "Preview yüklənmədi.");
+        renderLogPreview(data.embed);
+      } catch (error) {
+        root.innerHTML = `<p class="text-sm text-rose-300 text-center py-8">${escapeHtml(error.message || "Preview yüklənmədi.")}</p>`;
+      }
+    }
+
+    function renderLogPreview(embed) {
+      const root = document.getElementById("logPreview");
+      if (!root || !embed) return;
+      const color = `#${Number(embed.color || 0).toString(16).padStart(6, "0")}`;
+      const formatText = value => escapeHtml(value || "")
+        .replace(/&lt;@!?\d+&gt;/g, "@Nümunə üzv")
+        .replace(/&lt;#\d+&gt;/g, "#ümumi")
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, '<code class="rounded bg-black/30 px-1">$1</code>')
+        .replace(/\n/g, "<br>");
+      const author = embed.author || {};
+      const footer = embed.footer || {};
+      const botAvatar = footer.icon_url || "https://cdn.discordapp.com/embed/avatars/0.png";
+      const fields = (embed.fields || []).map(field => `
+        <div class="mb-2 ${field.inline ? 'inline-block mr-4 align-top' : 'block'}">
+          <div class="text-xs font-bold text-slate-200">${formatText(field.name)}</div>
+          <div class="text-sm text-slate-300">${formatText(field.value)}</div>
+        </div>
+      `).join("");
+      const thumbnail = embed.thumbnail?.url
+        ? `<img src="${escapeHtml(embed.thumbnail.url)}" alt="" class="float-right ml-3 mb-2 w-20 h-20 rounded-lg object-cover"/>`
+        : "";
+      const timestamp = embed.timestamp ? new Date(embed.timestamp).toLocaleString() : "";
+      root.innerHTML = `
+        <div class="max-w-2xl rounded-lg bg-[#313338] p-3 text-left">
+          <div class="flex items-center gap-2 mb-2">
+            <img src="${escapeHtml(botAvatar)}" alt="" class="w-8 h-8 rounded-full"/>
+            <span class="text-sm font-semibold text-white">Abi Bot</span>
+            <span class="text-xs text-slate-400">nümunə mesaj</span>
+          </div>
+          <div class="rounded-r-md bg-[#2b2d31] p-3" style="border-left:4px solid ${color}">
+            <div class="flex items-center gap-2 mb-2">
+              ${author.icon_url ? `<img src="${escapeHtml(author.icon_url)}" alt="" class="w-5 h-5 rounded-full"/>` : ""}
+              <span class="text-xs font-semibold text-slate-300">${formatText(author.name || "")}</span>
+            </div>
+            ${thumbnail}
+            <div class="whitespace-normal break-words text-sm leading-relaxed text-slate-200">${formatText(embed.description || "")}</div>
+            ${fields ? `<div class="clear-both pt-2">${fields}</div>` : '<div class="clear-both"></div>'}
+            <div class="clear-both mt-2 flex items-center gap-2 text-[10px] text-slate-500">
+              ${footer.icon_url ? `<img src="${escapeHtml(footer.icon_url)}" alt="" class="w-4 h-4 rounded-full"/>` : ""}
+              <span>${formatText(footer.text || "")}</span>
+              ${timestamp ? `<span>· ${escapeHtml(timestamp)}</span>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     async function saveLogSettings() {
       const guildId = document.getElementById("logsGuildSelect").value;
       const events = [...(window.logEventData||[])].map(e => ({key:e.key, enabled:!!document.querySelector(`[data-log-enabled="${e.key}"]`)?.checked, channel_id:document.querySelector(`[data-log-channel="${e.key}"]`)?.value||null}));

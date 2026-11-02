@@ -69,10 +69,17 @@ def _display(value):
 
 
 def _mention(value):
-    """Return a clickable <@id> mention when possible, else just the display name."""
+    """Return a clickable mention when possible, else just the display name.
+
+    Discord's own `.mention` is used so each object type gets the right syntax:
+    members/users -> <@id>, roles -> <@&id>, channels -> <#id>. Always using
+    <@id> (the old behaviour) breaks roles and channels — Discord shows the
+    raw bracket text instead of the coloured name chip.
+    """
     ident, name = _display(value)
     if ident is not None:
-        return f"<@{ident}>", name
+        native_mention = getattr(value, "mention", None)
+        return (str(native_mention) if native_mention else f"<@{ident}>"), name
     return name, name
 
 
@@ -94,6 +101,68 @@ _ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 INVITE_ROWS = {"Dəvət edən": "dəvət edən", "Dəvət linki": "link", "Dəvət kodu": "kod"}
 INVITE_EVENTS = {"member_join", "invite_use", "invite_create", "invite_delete"}
+
+# Giriş/dəvət logunun dizaynı: əsas sətirlər (icraçı/hədəf...) heç vaxt sükutla
+# gizlədilmir — məlumat yoxdursa belə, mənalı etiket və "müəyyən edilmədi" ilə
+# görünür. Bütün digər hadisə növləri də eyni prinsiplə işləsin deyə, hər event
+# üçün ayrıca (actor_label, target_label) cütü təyin olunur. Qrupun ümumi
+# mənasına uyğun gəlməyən generik "icraçı/hədəf" sözləri əvəzinə hər qrup üçün
+# ən təbii Azərbaycan sözü seçilib (üzv, rol, kanal, müəllif, istifadəçi...).
+NOT_SET = "müəyyən edilmədi"
+EVENT_ROLE_LABELS = {
+    # Üzvlər
+    "member_leave":        {"actor": None,     "target": "üzv"},
+    "member_update":       {"actor": None,     "target": "üzv"},
+    "member_roles":        {"actor": "icraçı", "target": "üzv"},
+    # Moderasiya
+    "moderation_warn":     {"actor": "icraçı", "target": "hədəf"},
+    "moderation_timeout":  {"actor": "icraçı", "target": "hədəf"},
+    "moderation_kick":     {"actor": "icraçı", "target": "hədəf"},
+    "moderation_ban":      {"actor": "icraçı", "target": "hədəf"},
+    "moderation_unban":    {"actor": "icraçı", "target": "hədəf"},
+    # Rollar — target_kind: real Role obyekti yoxdursa (məs. rol silinib), mention
+    # yenə də <@&id> formatında qurulur, generik <@id> (istifadəçi) yox.
+    "role_create":         {"actor": "icraçı", "target": "rol", "target_kind": "role"},
+    "role_update":         {"actor": "icraçı", "target": "rol", "target_kind": "role"},
+    "role_delete":         {"actor": "icraçı", "target": "rol", "target_kind": "role"},
+    # Kanallar
+    "channel_create":      {"actor": "icraçı", "target": "kanal", "target_kind": "channel"},
+    "channel_update":      {"actor": "icraçı", "target": "kanal", "target_kind": "channel"},
+    "channel_delete":      {"actor": "icraçı", "target": "kanal", "target_kind": "channel"},
+    # Server
+    "guild_update":        {"actor": "icraçı", "target": None},
+    # Səs
+    "voice_join":          {"actor": None,     "target": "üzv"},
+    "voice_leave":         {"actor": None,     "target": "üzv"},
+    "voice_move":          {"actor": None,     "target": "üzv"},
+    "voice_state":         {"actor": None,     "target": "üzv"},
+    # Mesajlar
+    "message_edit":        {"actor": None,     "target": "müəllif"},
+    "message_delete":      {"actor": None,     "target": "müəllif"},
+    "message_bulk_delete": {"actor": None,     "target": None},
+    # Sistem
+    "system_error":        {"actor": None,     "target": "istifadəçi"},
+    "log_delivery_error":  {"actor": None,     "target": "kanal", "target_kind": "channel"},
+}
+DEFAULT_ROLE_LABELS = {"actor": "icraçı", "target": "hədəf"}
+
+
+def _kind_mention(value, ident, kind):
+    """Discord obyektinin öz .mention-u yoxdursa (məs. silinmiş rol yalnız ID
+    kimi qalır), hadisənin məlum növünə görə düzgün mention sintaksisini özümüz
+    qururuq: rol -> <@&id>, kanal -> <#id>, əks halda <@id>.
+    """
+    native = getattr(value, "mention", None)
+    if native:
+        return str(native)
+    if ident is None:
+        return None
+    if kind == "role":
+        return f"<@&{ident}>"
+    if kind == "channel":
+        return f"<#{ident}>"
+    return f"<@{ident}>"
+
 ROW_LABELS = {
     "Discord hesabı yaradılıb": "hesab", "Serverə qoşulub": "qoşuldu", "Serverə qoşulma vaxtı": "qoşulmuşdu",
     "Səbəb": "səbəb", "İzah": "qeyd", "Mesaj ID": "mesaj id", "Əvvəlki kanal": "əvvəl", "Yeni kanal": "indi",
@@ -131,10 +200,57 @@ def _row(label, value):
     return f"`{label:<12}` {value}"
 
 
+def format_audit_changes(changes):
+    """Turn a discord.AuditLogChanges before/after pair into readable
+    'sahə: köhnə → yeni' lines instead of the raw <AuditLogDiff ...> repr.
+    Call this in bot.py before putting the value into details — the result
+    is a plain string, so it still stores fine as JSON in the log archive.
+    """
+    if not changes:
+        return ""
+    before, after = getattr(changes, "before", None), getattr(changes, "after", None)
+    try:
+        before_map = dict(iter(before)) if before else {}
+    except TypeError:
+        before_map = {}
+    try:
+        after_map = dict(iter(after)) if after else {}
+    except TypeError:
+        after_map = {}
+    keys = list(dict.fromkeys(list(before_map.keys()) + list(after_map.keys())))
+    lines = []
+    for key in keys:
+        b, a = before_map.get(key), after_map.get(key)
+        if b == a:
+            continue
+        label = str(key).replace("_", " ")
+        b_text, a_text = _stringify_change_value(b), _stringify_change_value(a)
+        if b_text == a_text:
+            continue
+        lines.append(f"{label}: {b_text} → {a_text}")
+    return "\n".join(lines)[:2000]
+
+
+def _stringify_change_value(value):
+    """A role/channel LIST (e.g. roles=[<Role ...>]) str()'s to each item's
+    repr, not its name — that's the '<Role id=... name=...>' junk seen in
+    role-list changes. Render each item with str() instead so a role list
+    shows plain names like 'Coffee Guest, Moderator'.
+    """
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(v) for v in value)[:200] if value else "—"
+    return str(value)[:120]
+
+
 def make_embed(event_key, title, actor=None, target=None, channel=None, details=None,
                created_at=None, bot_avatar_url=None, guild_icon_url=None):
     info = LOG_EVENT_MAP.get(event_key, {"label": event_key, "group": "Sistem"})
     style = GROUP_STYLE.get(info["group"], {"color": NEUTRAL, "emoji": "✦"})
+    if event_key in {"moderation_ban", "moderation_unban"}:
+        member_group = LOG_EVENT_MAP["member_join"]["group"]
+        style = GROUP_STYLE[member_group]
     details = dict(details or {})
 
     actor_mention, actor_name = _mention(actor)
@@ -161,10 +277,30 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
         if channel is not None:
             rows.append(_row("kanal", getattr(channel, "mention", None) or getattr(channel, "name", None) or str(channel)))
     else:
-        if actor_name:
-            rows.append(_row("icraçı", actor_mention))
-        if target_name:
-            rows.append(_row("hədəf", target_mention))
+        # Digər bütün hadisələr də giriş/dəvət logunun eyni prinsipi ilə işləyir:
+        # mənalı etiket + sətir həmişə görünür, məlumat yoxdursa yer tutucu yazılır.
+        role_labels = EVENT_ROLE_LABELS.get(event_key, DEFAULT_ROLE_LABELS)
+        actor_label = role_labels.get("actor")
+        target_label = role_labels.get("target")
+        target_kind = role_labels.get("target_kind", "user")
+
+        if actor_label:
+            if actor_name:
+                actor_value = actor_mention
+            else:
+                # Audit Log icazəsi olmadıqda details-ə yazılan "İcraçı" qeydini
+                # əsas sətrə köçürürük ki, iki dəfə görünməsin (dəvət edən sətri kimi).
+                fallback = str(details.pop("İcraçı", "") or "").strip()
+                actor_value = fallback if fallback and fallback.lower() not in _EMPTY_VALUES else NOT_SET
+            rows.append(_row(actor_label, actor_value))
+
+        if target_label:
+            if target_name:
+                target_value = _kind_mention(target, target_id, target_kind) or target_name
+            else:
+                target_value = NOT_SET
+            rows.append(_row(target_label, target_value))
+
         if channel is not None:
             rows.append(_row("kanal", getattr(channel, "mention", None) or getattr(channel, "name", None) or str(channel)))
 
@@ -184,7 +320,9 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
     body.extend(rows)
     embed = discord.Embed(description="\n".join(body)[:4000], color=style["color"],
                           timestamp=created_at or datetime.now(timezone.utc))
-    embed.set_author(name=info["label"].lower(), icon_url=guild_icon_url or DEFAULT_AVATAR)
+    # Böyük başlıq onsuz da hadisəni tam yazır (məs. "Rol silindi"); yuxarıdakı
+    # kiçik yazını eyni mətnin təkrarı etmək əvəzinə qrup adını göstəririk.
+    embed.set_author(name=info["group"], icon_url=guild_icon_url or DEFAULT_AVATAR)
 
     thumb = _avatar_url(target) or _avatar_url(actor)
     if thumb:

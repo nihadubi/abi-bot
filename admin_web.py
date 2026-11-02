@@ -12,12 +12,13 @@ import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import List, Optional, Tuple
 
 import aiohttp
 from aiohttp import web
 import discord
-from logging_system import LOG_EVENTS, LOG_EVENT_MAP
+from logging_system import INVITE_EVENTS, INVITE_ROWS, LOG_EVENTS, LOG_EVENT_MAP, make_embed
 
 from admin_helpers import (
     ACTIVE_SESSIONS,
@@ -752,6 +753,56 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             "channels": channels})
 
     @require_auth
+    async def handle_api_log_preview(request: web.Request):
+        guild_id = request.query.get("guild_id", "")
+        event_key = request.query.get("event", "")
+        if not guild_id.isdigit() or not bot.get_guild(int(guild_id)):
+            return web.json_response({"success": False, "error": "Server seçilməlidir."}, status=400)
+        if event_key not in LOG_EVENT_MAP:
+            return web.json_response({"success": False, "error": "Log növü tapılmadı."}, status=400)
+
+        guild = bot.get_guild(int(guild_id))
+        sample_avatar = "https://cdn.discordapp.com/embed/avatars/0.png"
+        actor = SimpleNamespace(
+            id=111111111111111111, name="Nümunə icraçı", display_name="Nümunə icraçı",
+            display_avatar=SimpleNamespace(url=sample_avatar),
+        )
+        target = SimpleNamespace(
+            id=222222222222222222, name="Nümunə üzv", display_name="Nümunə üzv",
+            display_avatar=SimpleNamespace(url=sample_avatar),
+        )
+        channel = SimpleNamespace(id=333333333333333333, name="ümumi", mention="<#333333333333333333>")
+        details = {"Nümunə": "Hadisəyə aid əlavə məlumat burada görünəcək."}
+        if event_key in INVITE_EVENTS:
+            inviter_key, link_key, code_key = INVITE_ROWS
+            details = {
+                inviter_key: "Nümunə icraçı",
+                link_key: "https://discord.gg/example",
+                code_key: "example",
+                "Nümunə": "Dəvət məlumatı və qoşulan üzv.",
+            }
+
+        avatar = getattr(getattr(getattr(bot, "user", None), "display_avatar", None), "url", None)
+        guild_icon = getattr(getattr(guild, "icon", None), "url", None)
+        try:
+            embed = make_embed(
+                event_key,
+                LOG_EVENT_MAP[event_key]["label"],
+                actor=actor,
+                target=target,
+                channel=channel,
+                details=details,
+                created_at=datetime.now(timezone.utc),
+                bot_avatar_url=avatar,
+                guild_icon_url=guild_icon,
+            )
+            embed_data = embed.to_dict()
+        except Exception:
+            logger.exception("Log preview hazırlana bilmədi | guild=%s event=%s", guild_id, event_key)
+            return web.json_response({"success": False, "error": "Bu hadisə üçün preview yaradıla bilmədi."}, status=500)
+        return web.json_response({"success": True, "embed": embed_data})
+
+    @require_auth
     async def handle_api_save_log_settings(request: web.Request):
         try:
             data = await request.json()
@@ -1369,6 +1420,7 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
     app.router.add_get("/admin/api/commands", handle_api_command_catalog)
     app.router.add_get("/admin/api/channels", handle_api_channels)
     app.router.add_get("/admin/api/logs/settings", handle_api_log_settings)
+    app.router.add_get("/admin/api/logs/preview", handle_api_log_preview)
     app.router.add_post("/admin/api/logs/settings", handle_api_save_log_settings)
     app.router.add_get("/admin/api/logs/events", handle_api_log_events)
     app.router.add_get("/admin/api/logs/analytics", handle_api_log_analytics)
