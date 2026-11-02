@@ -489,6 +489,7 @@ STATUS_TRACKS = [
     "Sludge Factory", "Frogs", "Over Now",
 ]
 STATUS_ROTATION_SECONDS = 10 * 60
+DEFAULT_WELCOME_MESSAGE = "Xoş gəldin, {mention}! 💙 Serverdə səni görməyimizə şadıq. Qaydalarla tanış ol və söhbətə qoşul!"
 status_track_index = 0
 status_rotation_task = None
 slash_commands_synced = False
@@ -622,48 +623,23 @@ async def on_member_join(member: discord.Member):
                 logger.exception("Avtomatik rol verilə bilmədi | guild=%s role=%s member=%s",
                                  member.guild.id, auto_role.id, member.id)
 
-    welcome_channel_value = db.get_guild_setting(member.guild.id, "welcome_channel", "")
-    welcome_message = db.get_guild_setting(member.guild.id, "welcome_message", "").strip()
+    welcome_message = db.get_guild_setting(member.guild.id, "welcome_message", "").strip() or DEFAULT_WELCOME_MESSAGE
     remove_role_value = db.get_guild_setting(member.guild.id, "welcome_button_remove_role", "")
     add_role_value = db.get_guild_setting(member.guild.id, "welcome_button_add_role", "")
     role_swap_view = None
     if str(remove_role_value).isdigit() and str(add_role_value).isdigit():
         button_label = db.get_guild_setting(member.guild.id, "welcome_button_label", "Rolu dəyiş")
         role_swap_view = WelcomeRoleSwapView(button_label)
-    welcome_enabled = bool(welcome_message or role_swap_view)
-    if welcome_enabled and not str(welcome_channel_value).isdigit():
-        logger.warning("Qarşılama mesajı/düyməsi qurulub, amma kanal seçilməyib | guild=%s", member.guild.id)
-    if str(welcome_channel_value).isdigit() and welcome_enabled:
-        welcome_channel = member.guild.get_channel(int(welcome_channel_value))
-        if welcome_channel is None:
-            try:
-                welcome_channel = await member.guild.fetch_channel(int(welcome_channel_value))
-            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                logger.exception("Qarşılama kanalı tapılmadı | guild=%s channel=%s",
-                                 member.guild.id, welcome_channel_value)
-        if isinstance(welcome_channel, discord.TextChannel):
-            replacements = {
-                "{mention}": member.mention,
-                "{user}": str(member),
-                "{username}": member.display_name,
-                "{server}": member.guild.name,
-                "{member_count}": str(member.guild.member_count or 0),
-                "{id}": str(member.id),
-            }
-            for placeholder, value in replacements.items():
-                welcome_message = welcome_message.replace(placeholder, value)
-            try:
-                await welcome_channel.send(
-                    welcome_message[:2000] or None,
-                    view=role_swap_view,
-                    allowed_mentions=discord.AllowedMentions(users=[member], roles=False, everyone=False),
-                )
-            except (discord.Forbidden, discord.HTTPException):
-                logger.exception("Qarşılama mesajı göndərilə bilmədi | guild=%s channel=%s member=%s",
-                                 member.guild.id, welcome_channel.id, member.id)
-        else:
-            logger.warning("Qarşılama kanalı mətn kanalı deyil və ya əlçatan deyil | guild=%s channel=%s",
-                           member.guild.id, welcome_channel_value)
+    replacements = {
+        "{mention}": member.mention,
+        "{user}": str(member),
+        "{username}": member.display_name,
+        "{server}": member.guild.name,
+        "{member_count}": str(member.guild.member_count or 0),
+        "{id}": str(member.id),
+    }
+    for placeholder, value in replacements.items():
+        welcome_message = welcome_message.replace(placeholder, value)
 
     invite_info = await identify_join_invite(member.guild)
     inviter = None
@@ -679,11 +655,15 @@ async def on_member_join(member: discord.Member):
         "Dəvət linki": invite_info.get("url", "Naməlum / vanity"),
         "Dəvət kodu": invite_info.get("code", "Naməlum / vanity"),
         "İzah": invite_info.get("reason", "Dəvət istifadəsi müəyyən edildi." if invite_info.get("known") else "Dəqiq müəyyən edilmədi; inviter təxmin olunmadı."),
+        "Xoş gəldin": welcome_message[:1800],
     }
     await emit_log(bot, db, member.guild, "member_join", "Yeni üzv serverə qoşuldu",
-                   actor=inviter, target=member, details=join_details, created_at=member.joined_at)
+                   actor=inviter, target=member, details=join_details, created_at=member.joined_at,
+                   view=role_swap_view)
     await emit_log(bot, db, member.guild, "invite_use", "Dəvət istifadə edildi",
-                   actor=inviter, target=member, details=join_details, created_at=member.joined_at)
+                   actor=inviter, target=member,
+                   details={key: value for key, value in join_details.items() if key != "Xoş gəldin"},
+                   created_at=member.joined_at)
 
 @bot.event
 async def on_member_remove(member: discord.Member):

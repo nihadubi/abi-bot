@@ -372,7 +372,7 @@ def make_embed(event_key, title, actor=None, target=None, channel=None, details=
 
 
 async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
-                   channel=None, details=None, created_at=None, deliver=True):
+                   channel=None, details=None, created_at=None, deliver=True, view=None):
     """Persist every enabled event and deliver it only to its configured channel."""
     if guild is None or event_key not in LOG_EVENT_MAP:
         return None
@@ -437,7 +437,7 @@ async def emit_log(bot, db, guild, event_key, title, *, actor=None, target=None,
         else:
             embed = make_embed(event_key, title, actor, target, channel, details, created_at,
                                bot_avatar_url=bot_avatar_url, guild_icon_url=guild_icon_url)
-            await destination.send(embed=embed)
+            await destination.send(embed=embed, view=view)
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("Log kanala göndərilmədi | guild=%s event=%s channel=%s: %s",
                        guild.id, event_key, destination_id, exc)

@@ -775,18 +775,13 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
         guild = bot.get_guild(int(guild_id)) if guild_id.isdigit() else None
         if not guild:
             return web.json_response({"success": False, "error": "Server tapılmadı."}, status=404)
-        channels = [{"id": str(channel.id), "name": channel.name}
-                    for channel in guild.text_channels
-                    if guild.me and (perms := channel.permissions_for(guild.me)).view_channel and perms.send_messages]
         roles = [{"id": str(role.id), "name": role.name, "editable": _manageable_role(guild, role)}
                  for role in sorted(guild.roles, key=lambda item: item.position, reverse=True)
                  if role != guild.default_role]
         return web.json_response({
             "success": True,
-            "channels": channels,
             "roles": roles,
             "autorole_id": db.get_guild_setting(guild.id, "autorole", ""),
-            "welcome_channel_id": db.get_guild_setting(guild.id, "welcome_channel", ""),
             "welcome_message": db.get_guild_setting(guild.id, "welcome_message", ""),
             "welcome_button_remove_role": db.get_guild_setting(guild.id, "welcome_button_remove_role", ""),
             "welcome_button_add_role": db.get_guild_setting(guild.id, "welcome_button_add_role", ""),
@@ -842,20 +837,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
             if not allowed_role or allowed_role == guild.default_role:
                 return web.json_response({"success": False, "error": "Düymə üçün istifadəçi icazə rolu seçin."}, status=400)
 
-        channel_id = str(data.get("welcome_channel_id", "") or "").strip()
-        welcome_channel = None
-        if channel_id:
-            if not channel_id.isdigit():
-                return web.json_response({"success": False, "error": "Qarşılama kanalı düzgün deyil."}, status=400)
-            welcome_channel = guild.get_channel(int(channel_id))
-            if not isinstance(welcome_channel, discord.TextChannel):
-                return web.json_response({"success": False, "error": "Qarşılama üçün mətn kanalı seçin."}, status=400)
-            permissions = welcome_channel.permissions_for(guild.me)
-            if not (permissions.view_channel and permissions.send_messages):
-                return web.json_response({"success": False, "error": "Botun seçilən kanalda mesaj göndərmə icazəsi yoxdur."}, status=403)
-        if remove_role_id and not channel_id:
-            return web.json_response({"success": False, "error": "Rol düyməsini qarşılama kanalında göstərmək üçün kanal seçin."}, status=400)
-
         welcome_message = str(data.get("welcome_message", ""))
         if len(welcome_message) > 1800:
             return web.json_response({"success": False, "error": "Qarşılama mətni 1800 simvoldan uzun ola bilməz."}, status=400)
@@ -863,7 +844,6 @@ def setup_admin_routes(app: web.Application, bot: discord.Client, db):
         try:
             db.set_guild_settings(guild.id, {
                 "autorole": role_id,
-                "welcome_channel": channel_id,
                 "welcome_message": welcome_message,
                 "welcome_button_remove_role": remove_role_id,
                 "welcome_button_add_role": add_role_id,

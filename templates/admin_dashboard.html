@@ -708,10 +708,9 @@
 
           <div class="grid grid-cols-1 gap-5">
             <div class="glass-card border border-borderDark rounded-2xl p-5 space-y-4">
-              <div><h3 class="font-bold text-white">Yeni üzv</h3><p class="text-xs text-slate-400 mt-1">Boş seçim funksiyanı söndürür. Mətn dəyişənləri: <code>{mention}</code>, <code>{username}</code>, <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>, <code>{id}</code>.</p></div>
+              <div><h3 class="font-bold text-white">Yeni üzv</h3><p class="text-xs text-slate-400 mt-1">Qarşılama mətni “Yeni üzv serverə qoşuldu” loguna yazılır; rol düyməsi həmin logun altında görünür. Bunun üçün Loglar bölməsində həmin hadisəyə kanal seçilməlidir. Mətn boşdursa standart xoş gəldin mesajı işləyir. Dəyişənlər: <code>{mention}</code>, <code>{username}</code>, <code>{user}</code>, <code>{server}</code>, <code>{member_count}</code>, <code>{id}</code>.</p></div>
               <label class="block text-xs text-slate-400">Avtomatik veriləcək rol<select id="settingsAutorole" class="mt-1 w-full px-3 py-2 text-sm"></select></label>
-              <label class="block text-xs text-slate-400">Qarşılama kanalı<select id="settingsWelcomeChannel" class="mt-1 w-full px-3 py-2 text-sm"></select></label>
-              <label class="block text-xs text-slate-400">Qarşılama mətni<textarea id="settingsWelcomeMessage" rows="5" maxlength="1800" placeholder="Xoş gəldin {mention}! {server} serverində {member_count}-ci üzvsən." class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
+              <label class="block text-xs text-slate-400">Qarşılama mətni<textarea id="settingsWelcomeMessage" rows="5" maxlength="1800" placeholder="Xoş gəldin, {mention}! 💙 Serverdə səni görməyimizə şadıq. Qaydalarla tanış ol və söhbətə qoşul!" class="mt-1 w-full px-3 py-2 text-sm resize-y"></textarea></label>
               <div class="border-t border-borderDark pt-4 space-y-3">
                 <div><h4 class="text-sm font-semibold text-white">Qarşılama rol düyməsi</h4><p class="text-[11px] text-slate-400 mt-1">Administratorlar və seçdiyin icazə roluna sahib üzvlər basa bilər. Basanda birinci rol götürülür, ikinci rol verilir. Hər iki rol seçilməsə düymə söndürülür.</p></div>
                 <label class="block text-xs text-slate-400">Düyməyə basmağa icazəli rol<select id="settingsSwapAllowedRole" class="mt-1 w-full px-3 py-2 text-sm"></select></label>
@@ -885,11 +884,6 @@
         document.getElementById("settingsSwapAllowedRole").innerHTML = '<option value="">Yalnız administratorlar</option>' + data.roles.map(role => `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join("");
         document.getElementById("settingsSwapAllowedRole").value = data.welcome_button_allowed_role || "";
         document.getElementById("settingsSwapButtonLabel").value = data.welcome_button_label || "Rolu dəyiş";
-        const channelOptions = '<option value="">Qarşılama söndürülüb</option>' + data.channels.map(channel =>
-          `<option value="${channel.id}"># ${escapeHtml(channel.name)}</option>`).join("");
-        const channelSelect = document.getElementById("settingsWelcomeChannel");
-        channelSelect.innerHTML = channelOptions;
-        channelSelect.value = data.welcome_channel_id || "";
         document.getElementById("settingsWelcomeMessage").value = data.welcome_message || "";
       } catch (error) {
         showToast(error.message || "Server sazlamaları yüklənmədi.", "error");
@@ -901,7 +895,6 @@
         const res = await fetch("/admin/api/server-settings", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({
           guild_id:document.getElementById("settingsGuildSelect").value,
           autorole_id:document.getElementById("settingsAutorole").value,
-          welcome_channel_id:document.getElementById("settingsWelcomeChannel").value,
           welcome_message:document.getElementById("settingsWelcomeMessage").value,
           welcome_button_remove_role:document.getElementById("settingsSwapRemoveRole").value,
           welcome_button_add_role:document.getElementById("settingsSwapAddRole").value,
