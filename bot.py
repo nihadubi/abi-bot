@@ -122,6 +122,16 @@ async def send_error_card(ctx, title: str, description: str):
     await ctx.send(embed=embed)
 
 
+async def send_moderation_prompt(ctx, title: str, prompt: str, usage: str, example: str):
+    """Send a compact, conversational prompt for a moderation command."""
+    embed = discord.Embed(
+        title=title,
+        description=f"{prompt}\n`{usage}`\nMəsələn: `{example}`",
+        color=ERROR_COLOR,
+    )
+    await ctx.send(embed=embed)
+
+
 async def send_success_card(ctx, title: str, description: str, color: int = SUCCESS_COLOR):
     # Gözəl yaşıl uğur kartı
     embed = discord.Embed(
@@ -1107,6 +1117,20 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         command_name = ctx.command.qualified_name if ctx.command else "komanda"
         usage, example = get_command_guidance(command_name)
+        moderation_prompts = {
+            "ban": ("Bu gün kimi banlayırıq?", "Üzvü qeyd et və ya Discord ID-sini yaz."),
+            "unban": ("Kimin banını açaq?", "Discord ID-sini yaz."),
+            "kick": ("Serverdən kimi çıxaraq?", "Üzvü qeyd et və ya ID-sini yaz."),
+            "mute": ("Kimə timeout verək?", "Üzvü qeyd et və ya ID-sini yaz."),
+            "unmute": ("Kimin timeout-unu götürək?", "Üzvü qeyd et və ya ID-sini yaz."),
+            "warn": ("Kimə xəbərdarlıq edək?", "Üzvü qeyd et."),
+            "delwarn": ("Hansı xəbərdarlığı silək?", "Xəbərdarlıq ID-sini yaz."),
+            "clearwarn": ("Kimin xəbərdarlıqlarını təmizləyək?", "Üzvü qeyd et."),
+        }
+        if command_name in moderation_prompts:
+            prompt, hint = moderation_prompts[command_name]
+            await send_moderation_prompt(ctx, prompt, hint, usage, example)
+            return
         await send_error_card(
             ctx,
             f"{command_name.title()} üçün məlumat çatışmır",
@@ -1457,7 +1481,8 @@ def ban_target_display(target, user_id: int):
 async def ban(ctx, user_or_id: str, *, reason: str = "Səbəb göstərilməyib"):
     user_id = parse_ban_user_id(user_or_id)
     if user_id is None:
-        await send_error_card(ctx, "İstifadə xətası", "Üzv mention-ı və ya düzgün Discord user ID-si yazın.")
+        usage, example = get_command_guidance("ban")
+        await send_moderation_prompt(ctx, "Bu gün kimi banlayırıq?", "Üzvü qeyd et və ya düzgün Discord ID-sini yaz.", usage, example)
         return
 
     try:
@@ -1887,7 +1912,7 @@ async def slash_ban(
     reason: str = "Səbəb göstərilməyib",
 ):
     if (member is None) == (user_id is None):
-        await interaction.response.send_message("Üzv seçin və ya user ID yazın (yalnız birini).", ephemeral=True)
+        await interaction.response.send_message("Bu gün kimi banlayırıq? Üzvü seç və ya Discord ID-sini yaz.", ephemeral=True)
         return
 
     if member is not None:
@@ -1896,7 +1921,7 @@ async def slash_ban(
     else:
         resolved_id = parse_ban_user_id(user_id)
         if resolved_id is None:
-            await interaction.response.send_message("Düzgün Discord user ID-si yazın.", ephemeral=True)
+            await interaction.response.send_message("Bu gün kimi banlayırıq? Düzgün Discord ID-sini yaz.", ephemeral=True)
             return
         try:
             target = await resolve_ban_target(interaction.guild, resolved_id)
